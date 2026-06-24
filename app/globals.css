@@ -1,26 +1,47 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+/*
+  ============================================================
+  THEME — Helper Hospital (deep-green medical)
+  ------------------------------------------------------------
+  Change the theme from THIS block only. Every token below is
+  exposed as a Tailwind utility, e.g.:
+     --color-brand        -> bg-brand / text-brand / border-brand
+     --color-canvas       -> bg-canvas
+     --color-ink-muted    -> text-ink-muted
+  ============================================================
+*/
+@theme {
+  /* Brand greens */
+  --color-brand: #15663f; /* primary actions, logo, links */
+  --color-brand-hover: #114b34; /* primary hover */
+  --color-sidebar: #0f3d2d; /* dark sidebar background */
+  --color-sidebar-active: #1e7a4f; /* active nav item */
+  --color-sidebar-muted: #9bbcab; /* inactive sidebar text/icons */
+
+  /* Surfaces */
+  --color-canvas: #e9f4ed; /* app background (mint) */
+  --color-surface: #ffffff; /* cards / panels */
+  --color-surface-soft: #dcefe2; /* tiles, avatars, soft accents */
+  --color-edge: #d7e7dd; /* borders / dividers */
+
+  /* Text */
+  --color-ink: #0f2e22; /* headings / primary text */
+  --color-ink-muted: #6b7280; /* secondary text */
+  --color-ink-onbrand: #eaf3ee; /* text on dark/brand backgrounds */
+
+  /* Status */
+  --color-success: #15663f;
+  --color-success-soft: #dcefe2;
+  --color-warning: #b7791f;
+  --color-warning-soft: #fbeccd;
+  --color-danger: #c2410c;
+  --color-danger-soft: #fbe2d5;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@layer base {
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
   }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
 }

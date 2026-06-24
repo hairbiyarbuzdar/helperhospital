@@ -1,0 +1,172 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../app/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  DOCTOR
+  NURSE
+  RECEPTIONIST
+  PHARMACIST
+}
+
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum TestStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
+model User {
+  id        String   @id @default(cuid())
+  username  String   @unique
+  email     String?  @unique
+  name      String?
+  password  String
+  role      Role     @default(RECEPTIONIST)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+// A registered patient. `serial` is a DB sequence used to derive the MR
+// number (e.g. serial 1 -> "MR-20001"); `mrNumber` is then stored for search.
+model Patient {
+  id        String   @id @default(cuid())
+  serial    Int      @unique @default(autoincrement())
+  mrNumber  String?  @unique
+  name      String
+  age       Int
+  gender    Gender
+  mobile    String?
+  cnic      String?
+  doctorId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  doctor   Doctor?       @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  tests    PatientTest[]
+  payments Payment[]
+
+  @@map("patients")
+}
+
+// Master list of test types and their rates (the "Test Catalog").
+model TestCatalog {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  rate      Int // whole rupees
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  orders PatientTest[]
+
+  @@map("test_catalog")
+}
+
+// A test ordered for a specific patient. testName/rate are snapshotted at
+// order time so the record stays accurate even if the catalog changes.
+model PatientTest {
+  id        String        @id @default(cuid())
+  patientId String
+  testId    String?
+  testName  String
+  rate      Int
+  status    TestStatus    @default(PENDING)
+  result    String?
+  payment   PaymentStatus @default(UNPAID)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  patient Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  test    TestCatalog? @relation(fields: [testId], references: [id], onDelete: SetNull)
+
+  @@map("patient_tests")
+}
+
+// A doctor / consultant. `fee` is the consultation fee in whole rupees.
+model Doctor {
+  id            String   @id @default(cuid())
+  name          String
+  specialty     String?
+  qualification String?
+  mobile        String?
+  email         String?
+  fee           Int?
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  patients Patient[]
+
+  @@map("doctors")
+}
+
+// A cash/wallet/bank channel. Amounts are stored as whole rupees (Int).
+// Current balance = openingBalance + transfers in − transfers out.
+model PaymentMethod {
+  id             String   @id @default(cuid())
+  name           String   @unique
+  openingBalance Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  transfersOut Transfer[] @relation("TransfersFrom")
+  transfersIn  Transfer[] @relation("TransfersTo")
+  payments     Payment[]
+
+  @@map("payment_methods")
+}
+
+// An income payment taken from a patient via a payment method (e.g. test
+// charges paid at registration). Adds to the method's running balance.
+model Payment {
+  id              String    @id @default(cuid())
+  patientId       String
+  paymentMethodId String
+  amount          Int
+  refundedAt      DateTime?
+  createdAt       DateTime  @default(now())
+
+  patient Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  method  PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+
+  @@map("payments")
+}
+
+// A movement of funds from one method to another.
+model Transfer {
+  id        String   @id @default(cuid())
+  fromId    String
+  toId      String
+  amount    Int
+  note      String?
+  date      DateTime @default(now())
+  createdAt DateTime @default(now())
+
+  from PaymentMethod @relation("TransfersFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   PaymentMethod @relation("TransfersTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@map("transfers")
+}
