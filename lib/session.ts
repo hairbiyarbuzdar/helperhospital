@@ -4,7 +4,7 @@ import { cookies } from "next/headers";
 import type { SessionPayload } from "./definitions";
 
 const COOKIE_NAME = "session";
-const encodedKey = new TextEncoder().encode(process.env.SESSION_SECRET);
+const encodedKey = new TextEncoder().encode(process.env.JWT_SECRET);
 
 export async function encrypt(payload: SessionPayload) {
   return new SignJWT(payload as unknown as JWTPayload)

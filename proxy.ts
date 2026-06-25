@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 
-const encodedKey = new TextEncoder().encode(process.env.SESSION_SECRET);
+const encodedKey = new TextEncoder().encode(process.env.JWT_SECRET);
 
 // Routes reachable without a session. Everything else is protected.
 const publicRoutes = ["/login"];
