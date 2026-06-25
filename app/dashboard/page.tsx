@@ -7,6 +7,8 @@ import {
   TestTube,
   FileText,
   ShieldCheck,
+  Receipt,
+  Undo2,
 } from "lucide-react";
 import prisma from "@/lib/prisma";
 import { getUser } from "@/lib/dal";
@@ -35,32 +37,42 @@ function fmtDate(d: Date) {
 }
 
 export default async function DashboardPage() {
-  const [user, userCount, methods, recentTransfers, paymentTotal] =
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+
+  const [user, todayReceipts, todayTests, collection, refunds, recentTransfers] =
     await Promise.all([
       getUser(),
-    prisma.user.count(),
-    prisma.paymentMethod.findMany(),
-    prisma.transfer.findMany({
-      include: { from: true, to: true },
-      orderBy: { date: "desc" },
-      take: 5,
-    }),
-    prisma.payment.aggregate({
-      where: { refundedAt: null },
-      _sum: { amount: true },
-    }),
-  ]);
-
-  // Internal transfers net to zero across methods, so total =
-  // sum of openings + all patient payments collected.
-  const totalBalance =
-    methods.reduce((s, m) => s + m.openingBalance, 0) +
-    (paymentTotal._sum.amount ?? 0);
+      // Receipts (payments) issued today.
+      prisma.payment.count({ where: { createdAt: { gte: startOfToday } } }),
+      // Tests ordered today.
+      prisma.patientTest.count({ where: { createdAt: { gte: startOfToday } } }),
+      // Net amount collected (excludes refunded payments).
+      prisma.payment.aggregate({
+        where: { refundedAt: null },
+        _sum: { amount: true },
+      }),
+      // Total amount refunded.
+      prisma.payment.aggregate({
+        where: { refundedAt: { not: null } },
+        _sum: { amount: true },
+      }),
+      prisma.transfer.findMany({
+        include: { from: true, to: true },
+        orderBy: { date: "desc" },
+        take: 5,
+      }),
+    ]);
 
   const stats = [
-    { label: "Staff Accounts", value: String(userCount), icon: Users },
-    { label: "Payment Methods", value: String(methods.length), icon: CreditCard },
-    { label: "Total Balance", value: formatRs(totalBalance), icon: Wallet },
+    { label: "Today's Receipts", value: String(todayReceipts), icon: Receipt },
+    { label: "Today's Tests", value: String(todayTests), icon: TestTube },
+    {
+      label: "Total Collection",
+      value: formatRs(collection._sum.amount ?? 0),
+      icon: Wallet,
+    },
+    { label: "Refunds", value: formatRs(refunds._sum.amount ?? 0), icon: Undo2 },
   ];
 
   return (
@@ -77,7 +89,7 @@ export default async function DashboardPage() {
       </p>
 
       {/* Stats */}
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((s) => {
           const Icon = s.icon;
           return (
