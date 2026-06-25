@@ -2,6 +2,7 @@ import Link from "next/link";
 import { Users, Search } from "lucide-react";
 import prisma from "@/lib/prisma";
 import { AddPatientButton, DeletePatientButton } from "./patients-client";
+import { ExistingPatientButton } from "./existing-patient-client";
 
 export const dynamic = "force-dynamic";
 
@@ -97,7 +98,10 @@ export default async function PatientsPage({
             Register and browse all patient records.
           </p>
         </div>
-        <AddPatientButton doctors={doctors} tests={tests} methods={methods} />
+        <div className="flex flex-wrap gap-3">
+          <ExistingPatientButton tests={tests} methods={methods} />
+          <AddPatientButton doctors={doctors} tests={tests} methods={methods} />
+        </div>
       </div>
 
       {/* Search */}

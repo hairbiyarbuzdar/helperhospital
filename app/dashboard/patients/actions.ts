@@ -150,3 +150,128 @@ export async function deletePatient(id: string) {
   await prisma.patient.delete({ where: { id } });
   revalidatePath("/dashboard/patients");
 }
+
+export type PatientHit = {
+  id: string;
+  mrNumber: string | null;
+  name: string;
+};
+
+// Search existing patients by MR number or name; empty query returns the most
+// recently added patients. Used by the "existing patient" combobox.
+export async function searchPatients(query: string): Promise<PatientHit[]> {
+  await verifySession();
+  const q = query.trim();
+  const where = q
+    ? {
+        OR: [
+          { name: { contains: q, mode: "insensitive" as const } },
+          { mrNumber: { contains: q } },
+        ],
+      }
+    : {};
+  return prisma.patient.findMany({
+    where,
+    orderBy: { serial: "desc" },
+    take: 10,
+    select: { id: true, mrNumber: true, name: true },
+  });
+}
+
+export type ChargeInput = {
+  patientId: string;
+  items: BillingItem[];
+  paymentMethodId?: string;
+};
+
+const ChargeSchema = z.object({
+  patientId: z.string().min(1, { error: "Select a patient." }),
+  items: z
+    .array(
+      z.object({
+        testId: z.string().min(1),
+        rate: z.coerce
+          .number({ error: "Rate must be a number." })
+          .int({ error: "Rate must be a whole number." })
+          .min(0, { error: "Rate cannot be negative." }),
+      }),
+    )
+    .default([]),
+  paymentMethodId: z.string().optional(),
+});
+
+// Add tests + collect payment for an already-registered patient.
+export async function chargeExistingPatient(
+  input: ChargeInput,
+): Promise<ActionState> {
+  await verifySession();
+
+  const parsed = ChargeSchema.safeParse({
+    patientId: input.patientId,
+    items: (input.items ?? []).filter((i) => i.testId),
+    paymentMethodId: input.paymentMethodId || undefined,
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Invalid input." };
+  }
+
+  const { patientId, items, paymentMethodId } = parsed.data;
+
+  if (items.length === 0) {
+    return { error: "Add at least one test." };
+  }
+
+  const patient = await prisma.patient.findUnique({ where: { id: patientId } });
+  if (!patient) return { error: "Patient not found." };
+
+  const catalog = await prisma.testCatalog.findMany({
+    where: { id: { in: items.map((i) => i.testId) } },
+    select: { id: true, name: true },
+  });
+  const known = new Set(catalog.map((c) => c.id));
+  if (items.some((i) => !known.has(i.testId))) {
+    return { error: "One of the selected tests no longer exists." };
+  }
+  const nameById = new Map(catalog.map((c) => [c.id, c.name]));
+
+  const total = items.reduce((s, i) => s + i.rate, 0);
+
+  let method = null;
+  if (total > 0) {
+    if (!paymentMethodId) {
+      return { error: "Select a payment method to collect the charges." };
+    }
+    method = await prisma.paymentMethod.findUnique({
+      where: { id: paymentMethodId },
+    });
+    if (!method) return { error: "Selected payment method not found." };
+  }
+  const paid = method != null;
+
+  await prisma.$transaction(async (tx) => {
+    await tx.patientTest.createMany({
+      data: items.map((i) => ({
+        patientId: patient.id,
+        testId: i.testId,
+        testName: nameById.get(i.testId) ?? "Test",
+        rate: i.rate,
+        payment: paid ? ("PAID" as const) : ("UNPAID" as const),
+      })),
+    });
+
+    if (method && total > 0) {
+      await tx.payment.create({
+        data: {
+          patientId: patient.id,
+          paymentMethodId: method.id,
+          amount: total,
+        },
+      });
+    }
+  });
+
+  revalidatePath("/dashboard/patients");
+  revalidatePath("/dashboard/tests");
+  revalidatePath("/dashboard/payments");
+  return { ok: true };
+}
