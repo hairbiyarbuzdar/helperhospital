@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useRef, useState, useTransition } from "react";
-import { UserSearch, Search, X, Check } from "lucide-react";
+import { useEffect, useState, useTransition } from "react";
+import { UserSearch, Search, Check } from "lucide-react";
 import { formatRs } from "@/lib/format";
 import {
   searchPatients,
   chargeExistingPatient,
   type PatientHit,
 } from "./actions";
-import type { TestOption, MethodOption } from "./patients-client";
+import LineItems, { type CatalogOption, type ChosenItem } from "./line-items";
+import { openSlipWindow, writeSlip } from "./print-slip";
+import type { TestOption, FeeOption } from "./patients-client";
 import Modal from "../_components/modal";
 
 const fieldClass =
   "w-full rounded-lg border border-edge bg-surface px-3 py-2.5 text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-success-soft";
-
-type Row = { key: number; testId: string; rate: string };
 
 function PatientCombobox({
   selected,
@@ -104,53 +104,33 @@ function PatientCombobox({
 
 function ChargeForm({
   tests,
-  methods,
+  fees,
   onDone,
 }: {
   tests: TestOption[];
-  methods: MethodOption[];
+  fees: FeeOption[];
   onDone: () => void;
 }) {
   const [selected, setSelected] = useState<PatientHit | null>(null);
-  const [rows, setRows] = useState<Row[]>(() => [
-    { key: 0, testId: "", rate: "" },
-  ]);
+  const [testItems, setTestItems] = useState<ChosenItem[]>([]);
+  const [consultItems, setConsultItems] = useState<ChosenItem[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
-  const keyRef = useRef(0);
 
-  const testMap = new Map(tests.map((t) => [t.id, t]));
-  const total = rows.reduce((s, r) => s + (parseInt(r.rate, 10) || 0), 0);
-  const chosen = rows.filter((r) => r.testId);
+  const testMap = new Map<string, CatalogOption>(tests.map((t) => [t.id, t]));
+  const feeMap = new Map<string, CatalogOption>(fees.map((f) => [f.id, f]));
 
-  function removeRow(key: number) {
-    setRows((r) => {
-      const next = r.filter((x) => x.key !== key);
-      return next.length
-        ? next
-        : [{ key: ++keyRef.current, testId: "", rate: "" }];
-    });
-  }
-  function setTest(key: number, testId: string) {
-    const rate = testMap.get(testId)?.rate;
-    setRows((r) => {
-      const next = r.map((x) =>
-        x.key === key
-          ? { ...x, testId, rate: rate != null ? String(rate) : x.rate }
-          : x,
-      );
-      const last = next[next.length - 1];
-      if (testId && last.key === key) {
-        next.push({ key: ++keyRef.current, testId: "", rate: "" });
-      }
-      return next;
-    });
-  }
-  function setRate(key: number, rate: string) {
-    setRows((r) =>
-      r.map((x) => (x.key === key ? { ...x, rate: rate.replace(/\D/g, "") } : x)),
-    );
-  }
+  const summary = [
+    ...testItems.map((i) => ({
+      name: testMap.get(i.id)?.name ?? "Test",
+      rate: i.rate,
+    })),
+    ...consultItems.map((i) => ({
+      name: feeMap.get(i.id)?.name ?? "Consultation",
+      rate: i.rate,
+    })),
+  ];
+  const total = summary.reduce((s, r) => s + r.rate, 0);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -159,22 +139,25 @@ function ChargeForm({
       setError("Select a patient first.");
       return;
     }
-    if (chosen.length === 0) {
-      setError("Add at least one test.");
+    if (summary.length === 0) {
+      setError("Add at least one test or consultation fee.");
       return;
     }
-    const fd = new FormData(e.currentTarget);
+    const win = openSlipWindow();
     startTransition(async () => {
       const res = await chargeExistingPatient({
         patientId: selected.id,
-        paymentMethodId: String(fd.get("paymentMethodId") ?? ""),
-        items: chosen.map((r) => ({
-          testId: r.testId,
-          rate: parseInt(r.rate, 10) || 0,
-        })),
+        items: testItems.map((i) => ({ testId: i.id, rate: i.rate })),
+        consultations: consultItems.map((i) => ({ feeId: i.id, rate: i.rate })),
       });
-      if (res?.ok) onDone();
-      else setError(res?.error ?? "Something went wrong.");
+      if (res?.ok) {
+        if (res.slip && win) writeSlip(win, res.slip);
+        else win?.close();
+        onDone();
+      } else {
+        win?.close();
+        setError(res?.error ?? "Something went wrong.");
+      }
     });
   }
 
@@ -190,102 +173,40 @@ function ChargeForm({
         />
       </div>
 
-      {/* Tests */}
-      <div className="border-t border-edge pt-4">
-        <p className="text-sm font-semibold text-ink">Tests</p>
-        {tests.length === 0 && (
-          <p className="mt-2 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">
-            No tests in the catalog yet — add some in the Tests module first.
+      <LineItems
+        title="Tests"
+        catalog={tests}
+        emptyHint="No tests in the catalog yet — add some in the Tests module first."
+        onChange={setTestItems}
+      />
+
+      <LineItems
+        title="Consultation"
+        catalog={fees}
+        emptyHint="No consultation fees yet — add some in the Consultation Fees tab."
+        onChange={setConsultItems}
+      />
+
+      {/* Summary */}
+      {summary.length > 0 && (
+        <div className="rounded-xl border border-edge bg-canvas p-4">
+          <p className="text-xs font-semibold tracking-wider text-ink-muted">
+            SUMMARY
           </p>
-        )}
-        <div className="mt-3 flex flex-col gap-2">
-          {rows.map((row) => (
-            <div
-              key={row.key}
-              className="grid grid-cols-[1fr_6rem_auto] items-center gap-2"
-            >
-              <select
-                value={row.testId}
-                onChange={(e) => setTest(row.key, e.target.value)}
-                className={fieldClass}
-              >
-                <option value="" disabled>
-                  Select test
-                </option>
-                {tests.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({formatRs(t.rate)})
-                  </option>
-                ))}
-              </select>
-              <input
-                value={row.rate}
-                onChange={(e) => setRate(row.key, e.target.value)}
-                inputMode="numeric"
-                placeholder="Rate"
-                title="Rate (editable for discount)"
-                className={`${fieldClass} text-right`}
-              />
-              <button
-                type="button"
-                onClick={() => removeRow(row.key)}
-                className="rounded-md p-2 text-ink-muted transition hover:bg-danger-soft hover:text-danger"
-                title="Remove"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
+          <ul className="mt-2 flex flex-col gap-1">
+            {summary.map((r, idx) => (
+              <li key={idx} className="flex justify-between text-sm">
+                <span className="text-ink">{r.name}</span>
+                <span className="font-medium text-ink">{formatRs(r.rate)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-2 flex justify-between border-t border-edge pt-2 text-sm font-semibold">
+            <span className="text-ink">Total</span>
+            <span className="text-brand">{formatRs(total)}</span>
+          </div>
         </div>
-      </div>
-
-      {/* Summary + payment */}
-      <div className="grid gap-4 sm:grid-cols-2">
-        {chosen.length > 0 && (
-          <div className="rounded-xl border border-edge bg-canvas p-4">
-            <p className="text-xs font-semibold tracking-wider text-ink-muted">
-              SUMMARY
-            </p>
-            <ul className="mt-2 flex flex-col gap-1">
-              {chosen.map((r) => (
-                <li key={r.key} className="flex justify-between text-sm">
-                  <span className="text-ink">{testMap.get(r.testId)?.name}</span>
-                  <span className="font-medium text-ink">
-                    {formatRs(parseInt(r.rate, 10) || 0)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-            <div className="mt-2 flex justify-between border-t border-edge pt-2 text-sm font-semibold">
-              <span className="text-ink">Total</span>
-              <span className="text-brand">{formatRs(total)}</span>
-            </div>
-          </div>
-        )}
-
-        {total > 0 && (
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="paymentMethodId" className="text-sm font-medium text-ink">
-              Pay via
-            </label>
-            <select id="paymentMethodId" name="paymentMethodId" defaultValue="" className={fieldClass}>
-              <option value="" disabled>
-                Select payment method
-              </option>
-              {methods.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.name}
-                </option>
-              ))}
-            </select>
-            {methods.length === 0 && (
-              <p className="text-xs text-warning">
-                No payment methods yet — add one in the Payments module.
-              </p>
-            )}
-          </div>
-        )}
-      </div>
+      )}
 
       {error && (
         <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
@@ -310,8 +231,8 @@ function ChargeForm({
           {pending
             ? "Saving…"
             : total > 0
-              ? `Collect ${formatRs(total)}`
-              : "Add tests"}
+              ? `Save & print · ${formatRs(total)}`
+              : "Save & print"}
         </button>
       </div>
     </form>
@@ -320,10 +241,10 @@ function ChargeForm({
 
 export function ExistingPatientButton({
   tests,
-  methods,
+  fees,
 }: {
   tests: TestOption[];
-  methods: MethodOption[];
+  fees: FeeOption[];
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -337,8 +258,8 @@ export function ExistingPatientButton({
         Existing patient
       </button>
       {open && (
-        <Modal title="Add tests for existing patient" size="xl" onClose={() => setOpen(false)}>
-          <ChargeForm tests={tests} methods={methods} onDone={() => setOpen(false)} />
+        <Modal title="Add tests / consultation for existing patient" size="xl" onClose={() => setOpen(false)}>
+          <ChargeForm tests={tests} fees={fees} onDone={() => setOpen(false)} />
         </Modal>
       )}
     </>

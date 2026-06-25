@@ -11,7 +11,6 @@ export type ReturnState =
 
 function revalidate() {
   revalidatePath("/dashboard/returns");
-  revalidatePath("/dashboard/payments");
   revalidatePath("/dashboard");
 }
 
@@ -31,7 +30,6 @@ export async function returnFeeByMr(
   const payment = await prisma.payment.findFirst({
     where: { patientId: patient.id, refundedAt: null },
     orderBy: { createdAt: "desc" },
-    include: { method: true },
   });
   if (!payment) {
     return { error: `No refundable fee found for ${patient.name} (${mr}).` };
@@ -45,7 +43,7 @@ export async function returnFeeByMr(
   revalidate();
   return {
     ok: true,
-    message: `Returned ${formatRs(payment.amount)} to ${patient.name} (${mr}) from ${payment.method.name}.`,
+    message: `Returned ${formatRs(payment.amount)} to ${patient.name} (${mr}).`,
   };
 }
 

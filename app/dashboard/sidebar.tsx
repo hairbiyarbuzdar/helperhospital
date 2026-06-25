@@ -9,7 +9,6 @@ import {
   Stethoscope,
   TestTube,
   FileText,
-  CreditCard,
   Undo2,
   ShieldCheck,
   LogOut,
@@ -22,7 +21,6 @@ const NAV = [
   { href: "/dashboard/doctors", label: "Doctors", icon: Stethoscope },
   { href: "/dashboard/tests", label: "Tests", icon: TestTube },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
   { href: "/dashboard/returns", label: "Fee Return", icon: Undo2 },
   { href: "/dashboard/users", label: "User Management", icon: ShieldCheck },
 ];

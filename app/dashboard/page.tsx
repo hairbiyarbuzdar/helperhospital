@@ -1,7 +1,6 @@
 import Link from "next/link";
 import {
   Users,
-  CreditCard,
   Wallet,
   Stethoscope,
   TestTube,
@@ -21,7 +20,7 @@ const MODULES = [
   { href: "/dashboard/doctors", label: "Doctors", icon: Stethoscope },
   { href: "/dashboard/tests", label: "Tests", icon: TestTube },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/payments", label: "Payments", icon: CreditCard },
+  { href: "/dashboard/returns", label: "Fee Return", icon: Undo2 },
   { href: "/dashboard/users", label: "User Management", icon: ShieldCheck },
 ];
 
@@ -32,18 +31,14 @@ const today = new Date().toLocaleDateString("en-US", {
   year: "numeric",
 });
 
-function fmtDate(d: Date) {
-  return d.toISOString().slice(0, 10);
-}
-
 export default async function DashboardPage() {
   const startOfToday = new Date();
   startOfToday.setHours(0, 0, 0, 0);
 
-  const [user, todayReceipts, todayTests, collection, refunds, recentTransfers] =
+  const [user, todayReceipts, todayTests, collection, refunds] =
     await Promise.all([
       getUser(),
-      // Receipts (payments) issued today.
+      // Receipts (payments) collected today.
       prisma.payment.count({ where: { createdAt: { gte: startOfToday } } }),
       // Tests ordered today.
       prisma.patientTest.count({ where: { createdAt: { gte: startOfToday } } }),
@@ -56,11 +51,6 @@ export default async function DashboardPage() {
       prisma.payment.aggregate({
         where: { refundedAt: { not: null } },
         _sum: { amount: true },
-      }),
-      prisma.transfer.findMany({
-        include: { from: true, to: true },
-        orderBy: { date: "desc" },
-        take: 5,
       }),
     ]);
 
@@ -107,71 +97,29 @@ export default async function DashboardPage() {
         })}
       </div>
 
-      {/* Lower grid */}
-      <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        {/* Recent transfers */}
-        <div className="rounded-2xl bg-surface shadow-sm ring-1 ring-edge lg:col-span-2">
-          <div className="flex items-center justify-between px-6 py-5">
-            <h2 className="text-lg font-semibold text-ink">Recent Transfers</h2>
-            <Link
-              href="/dashboard/payments"
-              className="text-sm font-medium text-brand hover:underline"
-            >
-              View payments →
-            </Link>
-          </div>
-          {recentTransfers.length === 0 ? (
-            <p className="px-6 pb-10 pt-2 text-sm text-ink-muted">
-              No transfers recorded yet.
-            </p>
-          ) : (
-            <table className="w-full">
-              <thead>
-                <tr className="border-y border-edge text-left text-xs font-semibold tracking-wider text-ink-muted">
-                  <th className="px-6 py-3">DATE</th>
-                  <th className="px-6 py-3">FROM</th>
-                  <th className="px-6 py-3">TO</th>
-                  <th className="px-6 py-3">AMOUNT</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentTransfers.map((t) => (
-                  <tr key={t.id} className="border-b border-edge last:border-0">
-                    <td className="px-6 py-4 text-ink-muted">{fmtDate(t.date)}</td>
-                    <td className="px-6 py-4 font-medium text-ink">{t.from.name}</td>
-                    <td className="px-6 py-4 font-medium text-ink">{t.to.name}</td>
-                    <td className="px-6 py-4 font-bold text-ink">{formatRs(t.amount)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
+      {/* Module quick links */}
+      <div className="mt-6 rounded-2xl bg-surface shadow-sm ring-1 ring-edge">
+        <div className="px-6 py-5">
+          <h2 className="text-lg font-semibold text-ink">Modules</h2>
         </div>
-
-        {/* Module quick links */}
-        <div className="rounded-2xl bg-surface shadow-sm ring-1 ring-edge">
-          <div className="px-6 py-5">
-            <h2 className="text-lg font-semibold text-ink">Modules</h2>
-          </div>
-          <ul className="grid grid-cols-2 gap-2 px-4 pb-4">
-            {MODULES.map((m) => {
-              const Icon = m.icon;
-              return (
-                <li key={m.href}>
-                  <Link
-                    href={m.href}
-                    className="flex flex-col items-start gap-2 rounded-xl border border-edge p-3 transition hover:bg-canvas"
-                  >
-                    <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-soft text-brand">
-                      <Icon className="h-4 w-4" />
-                    </span>
-                    <span className="text-sm font-medium text-ink">{m.label}</span>
-                  </Link>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
+        <ul className="grid grid-cols-2 gap-3 px-6 pb-6 sm:grid-cols-3 lg:grid-cols-6">
+          {MODULES.map((m) => {
+            const Icon = m.icon;
+            return (
+              <li key={m.href}>
+                <Link
+                  href={m.href}
+                  className="flex flex-col items-start gap-2 rounded-xl border border-edge p-3 transition hover:bg-canvas"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-surface-soft text-brand">
+                    <Icon className="h-4 w-4" />
+                  </span>
+                  <span className="text-sm font-medium text-ink">{m.label}</span>
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );

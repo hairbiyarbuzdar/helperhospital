@@ -1,8 +1,19 @@
 import Link from "next/link";
-import { Users, Search } from "lucide-react";
+import { Users, Search, Receipt } from "lucide-react";
 import prisma from "@/lib/prisma";
-import { AddPatientButton, DeletePatientButton } from "./patients-client";
+import { formatRs } from "@/lib/format";
+import { pageItems } from "@/lib/pagination";
+import {
+  AddPatientButton,
+  DeletePatientButton,
+  EditPatientButton,
+  PrintPatientButton,
+} from "./patients-client";
 import { ExistingPatientButton } from "./existing-patient-client";
+import {
+  AddConsultationFeeButton,
+  DeleteConsultationFeeButton,
+} from "./consultation-client";
 
 export const dynamic = "force-dynamic";
 
@@ -14,35 +25,128 @@ const GENDER_LABEL: Record<string, string> = {
   OTHER: "Other",
 };
 
-function fmtDate(d: Date) {
-  return d.toISOString().slice(0, 10);
+const dateTimeFmt = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Karachi",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: true,
+});
+function fmtDateTime(d: Date) {
+  return dateTimeFmt.format(d);
 }
 
-// Build a compact page list with ellipsis, e.g. [1, "…", 4, 5, 6, "…", 20].
-function pageItems(current: number, total: number): (number | "…")[] {
-  const set = new Set<number>();
-  for (const n of [1, total, current - 1, current, current + 1]) {
-    if (n >= 1 && n <= total) set.add(n);
-  }
-  const sorted = [...set].sort((a, b) => a - b);
-  const out: (number | "…")[] = [];
-  let prev = 0;
-  for (const n of sorted) {
-    if (n - prev > 1) out.push("…");
-    out.push(n);
-    prev = n;
-  }
-  return out;
+function Tabs({ active }: { active: "list" | "fees" }) {
+  const tab = (key: "list" | "fees", label: string) => (
+    <Link
+      href={`/dashboard/patients?tab=${key}`}
+      className={`border-b-2 px-1 pb-3 text-sm font-semibold transition ${
+        active === key
+          ? "border-brand text-brand"
+          : "border-transparent text-ink-muted hover:text-ink"
+      }`}
+    >
+      {label}
+    </Link>
+  );
+  return (
+    <div className="mt-6 flex gap-6 border-b border-edge">
+      {tab("list", "Patients")}
+      {tab("fees", "Consultation Fees")}
+    </div>
+  );
 }
 
 export default async function PatientsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ page?: string; q?: string }>;
+  searchParams: Promise<{ page?: string; q?: string; tab?: string }>;
 }) {
   const sp = await searchParams;
-  const q = (sp.q ?? "").trim();
-  let page = Number.parseInt(sp.page ?? "1", 10);
+  const tab = sp.tab === "fees" ? "fees" : "list";
+
+  // Consultation fees are needed by the registration modals (active only) and
+  // by the fees tab (all).
+  const fees = await prisma.consultationFee.findMany({
+    orderBy: { name: "asc" },
+    select: { id: true, name: true, rate: true, isActive: true },
+  });
+  const activeFees = fees
+    .filter((f) => f.isActive)
+    .map(({ id, name, rate }) => ({ id, name, rate }));
+
+  return (
+    <div className="p-8">
+      {/* Header */}
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold text-ink">Patients</h1>
+          <p className="mt-1 text-ink-muted">
+            Register patients and manage consultation fees.
+          </p>
+        </div>
+        {tab === "fees" ? (
+          <AddConsultationFeeButton />
+        ) : (
+          <PatientActions fees={activeFees} />
+        )}
+      </div>
+
+      <Tabs active={tab} />
+
+      {tab === "fees" ? <FeesTab fees={fees} /> : <ListTab searchParams={sp} />}
+    </div>
+  );
+}
+
+async function PatientActions({
+  fees,
+}: {
+  fees: { id: string; name: string; rate: number }[];
+}) {
+  const [doctors, tests, seq] = await Promise.all([
+    prisma.doctor.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.testCatalog.findMany({
+      where: { isActive: true },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, rate: true },
+    }),
+    // Peek at the next MR (patient serial) without consuming the sequence.
+    prisma.$queryRaw<
+      { last_value: bigint; is_called: boolean }[]
+    >`SELECT last_value, is_called FROM patients_serial_seq`,
+  ]);
+
+  const s = seq[0];
+  const nextMr = s
+    ? s.is_called
+      ? Number(s.last_value) + 1
+      : Number(s.last_value)
+    : 1;
+
+  return (
+    <div className="flex flex-wrap gap-3">
+      <ExistingPatientButton tests={tests} fees={fees} />
+      <AddPatientButton doctors={doctors} tests={tests} fees={fees} nextMr={nextMr} />
+    </div>
+  );
+}
+
+/* ------------------------------ Patients tab ---------------------------- */
+
+async function ListTab({
+  searchParams,
+}: {
+  searchParams: { page?: string; q?: string };
+}) {
+  const q = (searchParams.q ?? "").trim();
+  let page = Number.parseInt(searchParams.page ?? "1", 10);
   if (!Number.isFinite(page) || page < 1) page = 1;
 
   const where = q
@@ -59,7 +163,7 @@ export default async function PatientsPage({
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   if (page > totalPages) page = totalPages;
 
-  const [patients, doctors, tests, methods] = await Promise.all([
+  const [patients, doctors] = await Promise.all([
     prisma.patient.findMany({
       where,
       include: { doctor: { select: { name: true } } },
@@ -72,40 +176,18 @@ export default async function PatientsPage({
       orderBy: { name: "asc" },
       select: { id: true, name: true },
     }),
-    prisma.testCatalog.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, rate: true },
-    }),
-    prisma.paymentMethod.findMany({
-      orderBy: { name: "asc" },
-      select: { id: true, name: true },
-    }),
   ]);
 
   const firstRow = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
   const lastRow = (page - 1) * PAGE_SIZE + patients.length;
   const href = (n: number) =>
-    `/dashboard/patients?page=${n}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
+    `/dashboard/patients?tab=list&page=${n}${q ? `&q=${encodeURIComponent(q)}` : ""}`;
 
   return (
-    <div className="p-8">
-      {/* Header */}
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-bold text-ink">Patients</h1>
-          <p className="mt-1 text-ink-muted">
-            Register and browse all patient records.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-3">
-          <ExistingPatientButton tests={tests} methods={methods} />
-          <AddPatientButton doctors={doctors} tests={tests} methods={methods} />
-        </div>
-      </div>
-
+    <>
       {/* Search */}
       <form method="get" className="mt-6 flex max-w-md gap-2">
+        <input type="hidden" name="tab" value="list" />
         <div className="relative flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
           <input
@@ -123,7 +205,7 @@ export default async function PatientsPage({
         </button>
         {q && (
           <Link
-            href="/dashboard/patients"
+            href="/dashboard/patients?tab=list"
             className="rounded-lg border border-edge px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-canvas"
           >
             Clear
@@ -131,8 +213,7 @@ export default async function PatientsPage({
         )}
       </form>
 
-      {/* Count */}
-      <div className="mt-8 flex items-center justify-between border-b border-edge pb-2">
+      <div className="mt-6 flex items-center justify-between border-b border-edge pb-2">
         <p className="flex items-center gap-2 text-xs font-semibold tracking-wider text-ink-muted">
           <Users className="h-4 w-4" />
           ALL PATIENTS
@@ -140,7 +221,6 @@ export default async function PatientsPage({
         <span className="text-sm font-semibold text-ink-muted">{total}</span>
       </div>
 
-      {/* Table */}
       <div className="mt-4 overflow-hidden rounded-2xl bg-surface shadow-sm ring-1 ring-edge">
         {total === 0 ? (
           <p className="px-6 py-16 text-center text-sm text-ink-muted">
@@ -166,7 +246,6 @@ export default async function PatientsPage({
                     <th className="px-6 py-3">GENDER</th>
                     <th className="px-6 py-3">DOCTOR</th>
                     <th className="px-6 py-3">MOBILE</th>
-                    <th className="px-6 py-3">CNIC</th>
                     <th className="px-6 py-3">REGISTERED</th>
                     <th className="px-6 py-3 text-right">ACTIONS</th>
                   </tr>
@@ -177,7 +256,9 @@ export default async function PatientsPage({
                       <td className="px-6 py-4 font-semibold text-brand">
                         {p.mrNumber}
                       </td>
-                      <td className="px-6 py-4 font-medium text-ink">{p.name}</td>
+                      <td className="px-6 py-4 font-bold uppercase text-ink">
+                        {p.name}
+                      </td>
                       <td className="px-6 py-4 text-ink">{p.age}</td>
                       <td className="px-6 py-4 text-ink">
                         {GENDER_LABEL[p.gender] ?? p.gender}
@@ -189,13 +270,23 @@ export default async function PatientsPage({
                         {p.mobile ?? "—"}
                       </td>
                       <td className="px-6 py-4 text-ink-muted">
-                        {p.cnic ?? "—"}
-                      </td>
-                      <td className="px-6 py-4 text-ink-muted">
-                        {fmtDate(p.createdAt)}
+                        {fmtDateTime(p.createdAt)}
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-1">
+                          <PrintPatientButton id={p.id} />
+                          <EditPatientButton
+                            patient={{
+                              id: p.id,
+                              name: p.name,
+                              age: p.age,
+                              gender: p.gender,
+                              mobile: p.mobile,
+                              cnic: p.cnic,
+                              doctorId: p.doctorId,
+                            }}
+                            doctors={doctors}
+                          />
                           <DeletePatientButton id={p.id} name={p.name} />
                         </div>
                       </td>
@@ -205,7 +296,6 @@ export default async function PatientsPage({
               </table>
             </div>
 
-            {/* Pagination */}
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-edge px-6 py-4">
               <p className="text-sm text-ink-muted">
                 Showing{" "}
@@ -216,17 +306,10 @@ export default async function PatientsPage({
               </p>
 
               <nav className="flex items-center gap-1">
-                <PageLink
-                  href={href(page - 1)}
-                  disabled={page <= 1}
-                  label="Prev"
-                />
+                <PageLink href={href(page - 1)} disabled={page <= 1} label="Prev" />
                 {pageItems(page, totalPages).map((it, i) =>
                   it === "…" ? (
-                    <span
-                      key={`e${i}`}
-                      className="px-2 text-sm text-ink-muted"
-                    >
+                    <span key={`e${i}`} className="px-2 text-sm text-ink-muted">
                       …
                     </span>
                   ) : (
@@ -252,6 +335,61 @@ export default async function PatientsPage({
               </nav>
             </div>
           </>
+        )}
+      </div>
+    </>
+  );
+}
+
+/* --------------------------- Consultation fees -------------------------- */
+
+function FeesTab({
+  fees,
+}: {
+  fees: { id: string; name: string; rate: number; isActive: boolean }[];
+}) {
+  return (
+    <div className="mt-6">
+      <div className="flex items-center justify-between border-b border-edge pb-2">
+        <p className="flex items-center gap-2 text-xs font-semibold tracking-wider text-ink-muted">
+          <Receipt className="h-4 w-4" />
+          CONSULTATION FEES
+        </p>
+        <span className="text-sm font-semibold text-ink-muted">{fees.length}</span>
+      </div>
+
+      <div className="mt-4 overflow-hidden rounded-2xl bg-surface shadow-sm ring-1 ring-edge">
+        {fees.length === 0 ? (
+          <p className="px-6 py-16 text-center text-sm text-ink-muted">
+            No consultation fees yet. Click{" "}
+            <span className="font-medium text-ink">Add consultation fee</span> to
+            create one.
+          </p>
+        ) : (
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-edge text-left text-xs font-semibold tracking-wider text-ink-muted">
+                <th className="px-6 py-3">FEE NAME</th>
+                <th className="px-6 py-3">RATE</th>
+                <th className="px-6 py-3 text-right">ACTIONS</th>
+              </tr>
+            </thead>
+            <tbody>
+              {fees.map((f) => (
+                <tr key={f.id} className="border-b border-edge last:border-0">
+                  <td className="px-6 py-4 font-medium text-ink">{f.name}</td>
+                  <td className="px-6 py-4 font-semibold text-ink">
+                    {formatRs(f.rate)}
+                  </td>
+                  <td className="px-6 py-4 text-right">
+                    <div className="flex justify-end">
+                      <DeleteConsultationFeeButton id={f.id} name={f.name} />
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         )}
       </div>
     </div>

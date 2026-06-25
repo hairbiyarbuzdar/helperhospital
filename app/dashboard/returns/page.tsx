@@ -27,7 +27,7 @@ export default async function ReturnsPage({
   if (page > totalPages) page = totalPages;
 
   const payments = await prisma.payment.findMany({
-    include: { patient: true, method: true },
+    include: { patient: true },
     orderBy: { createdAt: "desc" },
     skip: (page - 1) * PAGE_SIZE,
     take: PAGE_SIZE,
@@ -39,8 +39,7 @@ export default async function ReturnsPage({
     <div className="p-8">
       <h1 className="text-3xl font-bold text-ink">Fee Return</h1>
       <p className="mt-1 text-ink-muted">
-        Enter a patient&apos;s MR number to return their collected fee. The
-        amount is deducted from the payment method it was paid through.
+        Enter a patient&apos;s MR number to return their collected fee.
       </p>
 
       {/* MR search + return */}
@@ -71,7 +70,6 @@ export default async function ReturnsPage({
                   <tr className="border-b border-edge text-left text-xs font-semibold tracking-wider text-ink-muted">
                     <th className="px-6 py-3">PATIENT</th>
                     <th className="px-6 py-3">AMOUNT</th>
-                    <th className="px-6 py-3">METHOD</th>
                     <th className="px-6 py-3">DATE</th>
                     <th className="px-6 py-3">STATUS</th>
                     <th className="px-6 py-3 text-right">ACTION</th>
@@ -92,7 +90,6 @@ export default async function ReturnsPage({
                         <td className="px-6 py-4 font-semibold text-ink">
                           {formatRs(p.amount)}
                         </td>
-                        <td className="px-6 py-4 text-ink">{p.method.name}</td>
                         <td className="px-6 py-4 text-ink-muted">
                           {fmtDate(p.createdAt)}
                         </td>

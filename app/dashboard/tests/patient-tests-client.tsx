@@ -4,11 +4,13 @@ import { useActionState, useEffect, useState, useTransition } from "react";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { formatRs } from "@/lib/format";
 import {
-  createPatientTest,
+  createPatientTests,
   updatePatientTest,
   deletePatientTest,
   type ActionState,
 } from "./actions";
+import LineItems, { type ChosenItem } from "../patients/line-items";
+import { openSlipWindow, writeSlip } from "../patients/print-slip";
 import Modal from "../_components/modal";
 
 const fieldClass =
@@ -37,17 +39,48 @@ function OrderForm({
   tests: TestOption[];
   onDone: () => void;
 }) {
-  const [state, action, pending] = useActionState<ActionState, FormData>(
-    createPatientTest,
-    undefined,
-  );
+  const [items, setItems] = useState<ChosenItem[]>([]);
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
-    if (state?.ok) onDone();
-  }, [state, onDone]);
+  const testMap = new Map(tests.map((t) => [t.id, t]));
+  const summary = items.map((i) => ({
+    name: testMap.get(i.id)?.name ?? "Test",
+    rate: i.rate,
+  }));
+  const total = summary.reduce((s, r) => s + r.rate, 0);
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(undefined);
+    const patientId = String(new FormData(e.currentTarget).get("patientId") ?? "");
+    if (!patientId) {
+      setError("Select a patient.");
+      return;
+    }
+    if (items.length === 0) {
+      setError("Add at least one test.");
+      return;
+    }
+    const win = openSlipWindow();
+    startTransition(async () => {
+      const res = await createPatientTests({
+        patientId,
+        items: items.map((i) => ({ testId: i.id, rate: i.rate })),
+      });
+      if (res?.ok) {
+        if (res.slip && win) writeSlip(win, res.slip);
+        else win?.close();
+        onDone();
+      } else {
+        win?.close();
+        setError(res?.error ?? "Something went wrong.");
+      }
+    });
+  }
 
   return (
-    <form action={action} className="flex flex-col gap-4">
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
         <label htmlFor="patientId" className="text-sm font-medium text-ink">
           Patient
@@ -64,30 +97,36 @@ function OrderForm({
         </select>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="testId" className="text-sm font-medium text-ink">
-          Test
-        </label>
-        <select id="testId" name="testId" defaultValue="" className={fieldClass}>
-          <option value="" disabled>
-            Select test
-          </option>
-          {tests.map((t) => (
-            <option key={t.id} value={t.id}>
-              {t.name} — {formatRs(t.rate)}
-            </option>
-          ))}
-        </select>
-      </div>
+      <LineItems
+        title="Tests"
+        catalog={tests}
+        emptyHint="Add tests in the Test Catalog tab first."
+        onChange={setItems}
+      />
 
-      {tests.length === 0 && (
-        <p className="rounded-lg bg-warning-soft px-3 py-2 text-sm text-warning">
-          Add tests in the Test Catalog tab first.
-        </p>
+      {summary.length > 0 && (
+        <div className="rounded-xl border border-edge bg-canvas p-4">
+          <p className="text-xs font-semibold tracking-wider text-ink-muted">
+            SUMMARY
+          </p>
+          <ul className="mt-2 flex flex-col gap-1">
+            {summary.map((r, idx) => (
+              <li key={idx} className="flex justify-between text-sm">
+                <span className="text-ink">{r.name}</span>
+                <span className="font-medium text-ink">{formatRs(r.rate)}</span>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-2 flex justify-between border-t border-edge pt-2 text-sm font-semibold">
+            <span className="text-ink">Total</span>
+            <span className="text-brand">{formatRs(total)}</span>
+          </div>
+        </div>
       )}
-      {state?.error && (
+
+      {error && (
         <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
-          {state.error}
+          {error}
         </p>
       )}
 
@@ -101,10 +140,14 @@ function OrderForm({
         </button>
         <button
           type="submit"
-          disabled={pending || tests.length === 0 || patients.length === 0}
+          disabled={pending || patients.length === 0}
           className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-60"
         >
-          {pending ? "Saving…" : "Order test"}
+          {pending
+            ? "Saving…"
+            : total > 0
+              ? `Save & print · ${formatRs(total)}`
+              : "Save & print"}
         </button>
       </div>
     </form>
@@ -130,7 +173,7 @@ export function OrderTestButton({
         Order test
       </button>
       {open && (
-        <Modal title="Order a test" onClose={() => setOpen(false)}>
+        <Modal title="Order tests" size="lg" onClose={() => setOpen(false)}>
           <OrderForm patients={patients} tests={tests} onDone={() => setOpen(false)} />
         </Modal>
       )}

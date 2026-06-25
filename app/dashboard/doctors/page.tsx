@@ -2,7 +2,11 @@ import Link from "next/link";
 import { Stethoscope } from "lucide-react";
 import prisma from "@/lib/prisma";
 import { formatRs } from "@/lib/format";
-import { AddDoctorButton, DeleteDoctorButton } from "./doctors-client";
+import {
+  AddDoctorButton,
+  DeleteDoctorButton,
+  EditDoctorButton,
+} from "./doctors-client";
 
 export const dynamic = "force-dynamic";
 
@@ -81,10 +85,7 @@ export default async function DoctorsPage({
                 <thead>
                   <tr className="border-b border-edge text-left text-xs font-semibold tracking-wider text-ink-muted">
                     <th className="px-6 py-3">NAME</th>
-                    <th className="px-6 py-3">SPECIALTY</th>
-                    <th className="px-6 py-3">QUALIFICATION</th>
                     <th className="px-6 py-3">MOBILE</th>
-                    <th className="px-6 py-3">EMAIL</th>
                     <th className="px-6 py-3">FEE</th>
                     <th className="px-6 py-3">STATUS</th>
                     <th className="px-6 py-3 text-right">ACTIONS</th>
@@ -94,12 +95,7 @@ export default async function DoctorsPage({
                   {doctors.map((d) => (
                     <tr key={d.id} className="border-b border-edge last:border-0">
                       <td className="px-6 py-4 font-medium text-ink">{d.name}</td>
-                      <td className="px-6 py-4 text-ink">{d.specialty ?? "—"}</td>
-                      <td className="px-6 py-4 text-ink-muted">
-                        {d.qualification ?? "—"}
-                      </td>
                       <td className="px-6 py-4 text-ink-muted">{d.mobile ?? "—"}</td>
-                      <td className="px-6 py-4 text-ink-muted">{d.email ?? "—"}</td>
                       <td className="px-6 py-4 text-ink">
                         {d.fee != null ? formatRs(d.fee) : "—"}
                       </td>
@@ -115,7 +111,16 @@ export default async function DoctorsPage({
                         </span>
                       </td>
                       <td className="px-6 py-4 text-right">
-                        <div className="flex justify-end">
+                        <div className="flex justify-end gap-1">
+                          <EditDoctorButton
+                            doctor={{
+                              id: d.id,
+                              name: d.name,
+                              mobile: d.mobile,
+                              fee: d.fee,
+                              isActive: d.isActive,
+                            }}
+                          />
                           <DeleteDoctorButton id={d.id} name={d.name} />
                         </div>
                       </td>

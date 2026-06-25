@@ -1,77 +1,57 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
-import { UserPlus, Trash2, X } from "lucide-react";
+import { useState, useTransition } from "react";
+import { UserPlus, Trash2, Pencil, Printer } from "lucide-react";
 import { formatRs } from "@/lib/format";
 import {
   createPatientWithBilling,
   deletePatient,
+  updatePatient,
+  getPatientSlip,
   type BillingInput,
+  type UpdatePatientInput,
 } from "./actions";
+import LineItems, { type CatalogOption, type ChosenItem } from "./line-items";
+import { openSlipWindow, writeSlip } from "./print-slip";
 import Modal from "../_components/modal";
 
 export type DoctorOption = { id: string; name: string };
-export type TestOption = { id: string; name: string; rate: number };
-export type MethodOption = { id: string; name: string };
+export type TestOption = CatalogOption;
+export type FeeOption = CatalogOption;
 
 const fieldClass =
   "w-full rounded-lg border border-edge bg-surface px-3 py-2.5 text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-success-soft";
 
-type Row = { key: number; testId: string; rate: string };
-
 function AddPatientForm({
   doctors,
   tests,
-  methods,
+  fees,
   onDone,
 }: {
   doctors: DoctorOption[];
   tests: TestOption[];
-  methods: MethodOption[];
+  fees: FeeOption[];
   onDone: () => void;
 }) {
-  // Always start with one empty row.
-  const [rows, setRows] = useState<Row[]>(() => [
-    { key: 0, testId: "", rate: "" },
-  ]);
+  const [testItems, setTestItems] = useState<ChosenItem[]>([]);
+  const [consultItems, setConsultItems] = useState<ChosenItem[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
-  const keyRef = useRef(0);
 
   const testMap = new Map(tests.map((t) => [t.id, t]));
-  const total = rows.reduce((s, r) => s + (parseInt(r.rate, 10) || 0), 0);
-  const chosen = rows.filter((r) => r.testId);
+  const feeMap = new Map(fees.map((f) => [f.id, f]));
 
-  function removeRow(key: number) {
-    setRows((r) => {
-      const next = r.filter((x) => x.key !== key);
-      // Keep at least one row visible at all times.
-      return next.length
-        ? next
-        : [{ key: ++keyRef.current, testId: "", rate: "" }];
-    });
-  }
-  function setTest(key: number, testId: string) {
-    const rate = testMap.get(testId)?.rate;
-    setRows((r) => {
-      const next = r.map((x) =>
-        x.key === key
-          ? { ...x, testId, rate: rate != null ? String(rate) : x.rate }
-          : x,
-      );
-      // Selecting a test in the last row spawns a fresh empty row below it.
-      const last = next[next.length - 1];
-      if (testId && last.key === key) {
-        next.push({ key: ++keyRef.current, testId: "", rate: "" });
-      }
-      return next;
-    });
-  }
-  function setRate(key: number, rate: string) {
-    setRows((r) =>
-      r.map((x) => (x.key === key ? { ...x, rate: rate.replace(/\D/g, "") } : x)),
-    );
-  }
+  const summary = [
+    ...testItems.map((i) => ({
+      name: testMap.get(i.id)?.name ?? "Test",
+      rate: i.rate,
+    })),
+    ...consultItems.map((i) => ({
+      name: feeMap.get(i.id)?.name ?? "Consultation",
+      rate: i.rate,
+    })),
+  ];
+  const total = summary.reduce((s, r) => s + r.rate, 0);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -84,16 +64,21 @@ function AddPatientForm({
       mobile: String(fd.get("mobile") ?? ""),
       cnic: String(fd.get("cnic") ?? ""),
       doctorId: String(fd.get("doctorId") ?? ""),
-      paymentMethodId: String(fd.get("paymentMethodId") ?? ""),
-      items: chosen.map((r) => ({
-        testId: r.testId,
-        rate: parseInt(r.rate, 10) || 0,
-      })),
+      items: testItems.map((i) => ({ testId: i.id, rate: i.rate })),
+      consultations: consultItems.map((i) => ({ feeId: i.id, rate: i.rate })),
     };
+    // Open the print window synchronously so popup blockers allow it.
+    const win = openSlipWindow();
     startTransition(async () => {
       const res = await createPatientWithBilling(input);
-      if (res?.ok) onDone();
-      else setError(res?.error ?? "Something went wrong.");
+      if (res?.ok) {
+        if (res.slip && win) writeSlip(win, res.slip);
+        else win?.close();
+        onDone();
+      } else {
+        win?.close();
+        setError(res?.error ?? "Something went wrong.");
+      }
     });
   }
 
@@ -165,71 +150,31 @@ function AddPatientForm({
         </div>
       </div>
 
-      {/* Tests */}
-      <div className="border-t border-edge pt-4">
-        <p className="text-sm font-semibold text-ink">Tests</p>
+      <LineItems
+        title="Tests"
+        catalog={tests}
+        emptyHint="No tests in the catalog yet — add some in the Tests module to bill them here."
+        onChange={setTestItems}
+      />
 
-        {tests.length === 0 && (
-          <p className="mt-2 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">
-            No tests in the catalog yet — add some in the Tests module to bill them here.
-          </p>
-        )}
+      <LineItems
+        title="Consultation"
+        catalog={fees}
+        emptyHint="No consultation fees yet — add some in the Consultation Fees tab."
+        onChange={setConsultItems}
+      />
 
-        <div className="mt-3 flex flex-col gap-2">
-          {rows.map((row) => (
-            <div
-              key={row.key}
-              className="grid grid-cols-[1fr_6rem_auto] items-center gap-2"
-            >
-              <select
-                value={row.testId}
-                onChange={(e) => setTest(row.key, e.target.value)}
-                className={fieldClass}
-              >
-                <option value="" disabled>
-                  Select test
-                </option>
-                {tests.map((t) => (
-                  <option key={t.id} value={t.id}>
-                    {t.name} ({formatRs(t.rate)})
-                  </option>
-                ))}
-              </select>
-              <input
-                value={row.rate}
-                onChange={(e) => setRate(row.key, e.target.value)}
-                inputMode="numeric"
-                placeholder="Rate"
-                title="Rate (editable for discount)"
-                className={`${fieldClass} text-right`}
-              />
-              <button
-                type="button"
-                onClick={() => removeRow(row.key)}
-                className="rounded-md p-2 text-ink-muted transition hover:bg-danger-soft hover:text-danger"
-                title="Remove"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Summary + payment */}
-      <div className="grid gap-4 sm:grid-cols-2">
-      {chosen.length > 0 && (
+      {/* Summary */}
+      {summary.length > 0 && (
         <div className="rounded-xl border border-edge bg-canvas p-4">
           <p className="text-xs font-semibold tracking-wider text-ink-muted">
             SUMMARY
           </p>
           <ul className="mt-2 flex flex-col gap-1">
-            {chosen.map((r) => (
-              <li key={r.key} className="flex justify-between text-sm">
-                <span className="text-ink">{testMap.get(r.testId)?.name}</span>
-                <span className="font-medium text-ink">
-                  {formatRs(parseInt(r.rate, 10) || 0)}
-                </span>
+            {summary.map((r, idx) => (
+              <li key={idx} className="flex justify-between text-sm">
+                <span className="text-ink">{r.name}</span>
+                <span className="font-medium text-ink">{formatRs(r.rate)}</span>
               </li>
             ))}
           </ul>
@@ -239,31 +184,6 @@ function AddPatientForm({
           </div>
         </div>
       )}
-
-      {/* Payment method */}
-      {total > 0 && (
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor="paymentMethodId" className="text-sm font-medium text-ink">
-            Pay via
-          </label>
-          <select id="paymentMethodId" name="paymentMethodId" defaultValue="" className={fieldClass}>
-            <option value="" disabled>
-              Select payment method
-            </option>
-            {methods.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
-          {methods.length === 0 && (
-            <p className="text-xs text-warning">
-              No payment methods yet — add one in the Payments module.
-            </p>
-          )}
-        </div>
-      )}
-      </div>
 
       {error && (
         <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
@@ -284,7 +204,11 @@ function AddPatientForm({
           disabled={pending}
           className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-60"
         >
-          {pending ? "Saving…" : total > 0 ? `Register & collect ${formatRs(total)}` : "Register patient"}
+          {pending
+            ? "Saving…"
+            : total > 0
+              ? `Save & print · ${formatRs(total)}`
+              : "Save & print"}
         </button>
       </div>
     </form>
@@ -294,11 +218,13 @@ function AddPatientForm({
 export function AddPatientButton({
   doctors,
   tests,
-  methods,
+  fees,
+  nextMr,
 }: {
   doctors: DoctorOption[];
   tests: TestOption[];
-  methods: MethodOption[];
+  fees: FeeOption[];
+  nextMr: number;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -312,11 +238,15 @@ export function AddPatientButton({
         Add patient
       </button>
       {open && (
-        <Modal title="Register patient" size="xl" onClose={() => setOpen(false)}>
+        <Modal
+          title={`Register patient · MR: ${nextMr}`}
+          size="xl"
+          onClose={() => setOpen(false)}
+        >
           <AddPatientForm
             doctors={doctors}
             tests={tests}
-            methods={methods}
+            fees={fees}
             onDone={() => setOpen(false)}
           />
         </Modal>
@@ -350,5 +280,194 @@ export function DeletePatientButton({
     >
       <Trash2 className="h-4 w-4" />
     </button>
+  );
+}
+
+export type PatientRow = {
+  id: string;
+  name: string;
+  age: number;
+  gender: string;
+  mobile: string | null;
+  cnic: string | null;
+  doctorId: string | null;
+};
+
+export function PrintPatientButton({ id }: { id: string }) {
+  const [pending, startTransition] = useTransition();
+
+  function handlePrint() {
+    const win = openSlipWindow();
+    startTransition(async () => {
+      const slip = await getPatientSlip(id);
+      if (slip && win) writeSlip(win, slip);
+      else win?.close();
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handlePrint}
+      disabled={pending}
+      title="Print slip"
+      className="rounded-md p-1.5 text-ink-muted transition hover:bg-canvas hover:text-brand disabled:opacity-60"
+    >
+      <Printer className="h-4 w-4" />
+    </button>
+  );
+}
+
+function EditPatientForm({
+  patient,
+  doctors,
+  onDone,
+}: {
+  patient: PatientRow;
+  doctors: DoctorOption[];
+  onDone: () => void;
+}) {
+  const [error, setError] = useState<string | undefined>();
+  const [pending, startTransition] = useTransition();
+
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(undefined);
+    const fd = new FormData(e.currentTarget);
+    const input: UpdatePatientInput = {
+      id: patient.id,
+      name: String(fd.get("name") ?? ""),
+      age: String(fd.get("age") ?? ""),
+      gender: String(fd.get("gender") ?? ""),
+      mobile: String(fd.get("mobile") ?? ""),
+      cnic: String(fd.get("cnic") ?? ""),
+      doctorId: String(fd.get("doctorId") ?? ""),
+    };
+    startTransition(async () => {
+      const res = await updatePatient(input);
+      if (res?.ok) onDone();
+      else setError(res?.error ?? "Something went wrong.");
+    });
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="flex flex-col gap-1.5 sm:col-span-2">
+          <label htmlFor="e-name" className="text-sm font-medium text-ink">
+            Name
+          </label>
+          <input id="e-name" name="name" defaultValue={patient.name} className={fieldClass} autoFocus />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="e-age" className="text-sm font-medium text-ink">
+            Age
+          </label>
+          <input id="e-age" name="age" type="number" min={0} max={150} step={1} defaultValue={patient.age} className={fieldClass} />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="e-gender" className="text-sm font-medium text-ink">
+            Gender
+          </label>
+          <select id="e-gender" name="gender" defaultValue={patient.gender} className={fieldClass}>
+            <option value="MALE">Male</option>
+            <option value="FEMALE">Female</option>
+            <option value="OTHER">Other</option>
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="e-doctorId" className="text-sm font-medium text-ink">
+            Doctor
+          </label>
+          <select id="e-doctorId" name="doctorId" defaultValue={patient.doctorId ?? ""} className={fieldClass}>
+            <option value="">— None —</option>
+            {doctors.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="e-mobile" className="text-sm font-medium text-ink">
+            Mobile <span className="text-ink-muted">(optional)</span>
+          </label>
+          <input
+            id="e-mobile"
+            name="mobile"
+            inputMode="numeric"
+            maxLength={11}
+            defaultValue={patient.mobile ?? ""}
+            placeholder="03xxxxxxxxx"
+            onInput={(e) => {
+              e.currentTarget.value = e.currentTarget.value
+                .replace(/\D/g, "")
+                .slice(0, 11);
+            }}
+            className={fieldClass}
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <label htmlFor="e-cnic" className="text-sm font-medium text-ink">
+            CNIC <span className="text-ink-muted">(optional)</span>
+          </label>
+          <input id="e-cnic" name="cnic" defaultValue={patient.cnic ?? ""} placeholder="xxxxx-xxxxxxx-x" className={fieldClass} />
+        </div>
+      </div>
+
+      {error && (
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
+          {error}
+        </p>
+      )}
+
+      <div className="mt-1 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onDone}
+          className="rounded-lg border border-edge px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-canvas"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={pending}
+          className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-60"
+        >
+          {pending ? "Saving…" : "Save changes"}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+export function EditPatientButton({
+  patient,
+  doctors,
+}: {
+  patient: PatientRow;
+  doctors: DoctorOption[];
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        title="Edit patient"
+        className="rounded-md p-1.5 text-ink-muted transition hover:bg-canvas hover:text-brand"
+      >
+        <Pencil className="h-4 w-4" />
+      </button>
+      {open && (
+        <Modal title="Edit patient" size="lg" onClose={() => setOpen(false)}>
+          <EditPatientForm
+            patient={patient}
+            doctors={doctors}
+            onDone={() => setOpen(false)}
+          />
+        </Modal>
+      )}
+    </>
   );
 }

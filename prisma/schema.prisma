@@ -64,11 +64,42 @@ model Patient {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  doctor   Doctor?       @relation(fields: [doctorId], references: [id], onDelete: SetNull)
-  tests    PatientTest[]
-  payments Payment[]
+  doctor        Doctor?               @relation(fields: [doctorId], references: [id], onDelete: SetNull)
+  tests         PatientTest[]
+  consultations PatientConsultation[]
+  payments      Payment[]
 
   @@map("patients")
+}
+
+// Master list of consultation fees (name + rate), managed manually.
+model ConsultationFee {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  rate      Int // whole rupees
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  applied PatientConsultation[]
+
+  @@map("consultation_fees")
+}
+
+// A consultation fee applied to a patient. name/rate are snapshotted so the
+// record stays accurate even if the fee catalog changes.
+model PatientConsultation {
+  id        String   @id @default(cuid())
+  patientId String
+  feeId     String?
+  name      String
+  rate      Int
+  createdAt DateTime @default(now())
+
+  patient Patient          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  fee     ConsultationFee? @relation(fields: [feeId], references: [id], onDelete: SetNull)
+
+  @@map("patient_consultations")
 }
 
 // Master list of test types and their rates (the "Test Catalog").
@@ -107,66 +138,30 @@ model PatientTest {
 
 // A doctor / consultant. `fee` is the consultation fee in whole rupees.
 model Doctor {
-  id            String   @id @default(cuid())
-  name          String
-  specialty     String?
-  qualification String?
-  mobile        String?
-  email         String?
-  fee           Int?
-  isActive      Boolean  @default(true)
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id        String   @id @default(cuid())
+  name      String
+  mobile    String?
+  fee       Int? // consultation fee in whole rupees
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   patients Patient[]
 
   @@map("doctors")
 }
 
-// A cash/wallet/bank channel. Amounts are stored as whole rupees (Int).
-// Current balance = openingBalance + transfers in − transfers out.
-model PaymentMethod {
-  id             String   @id @default(cuid())
-  name           String   @unique
-  openingBalance Int      @default(0)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  transfersOut Transfer[] @relation("TransfersFrom")
-  transfersIn  Transfer[] @relation("TransfersTo")
-  payments     Payment[]
-
-  @@map("payment_methods")
-}
-
-// An income payment taken from a patient via a payment method (e.g. test
-// charges paid at registration). Adds to the method's running balance.
+// An income payment collected from a patient (e.g. test charges paid at
+// registration). Tracked as a plain collection — no payment method.
 model Payment {
-  id              String    @id @default(cuid())
-  patientId       String
-  paymentMethodId String
-  amount          Int
-  refundedAt      DateTime?
-  createdAt       DateTime  @default(now())
+  id         String    @id @default(cuid())
+  receiptNo  Int       @unique @default(autoincrement())
+  patientId  String
+  amount     Int
+  refundedAt DateTime?
+  createdAt  DateTime  @default(now())
 
-  patient Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  method  PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Restrict)
+  patient Patient @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@map("payments")
-}
-
-// A movement of funds from one method to another.
-model Transfer {
-  id        String   @id @default(cuid())
-  fromId    String
-  toId      String
-  amount    Int
-  note      String?
-  date      DateTime @default(now())
-  createdAt DateTime @default(now())
-
-  from PaymentMethod @relation("TransfersFrom", fields: [fromId], references: [id], onDelete: Cascade)
-  to   PaymentMethod @relation("TransfersTo", fields: [toId], references: [id], onDelete: Cascade)
-
-  @@map("transfers")
 }

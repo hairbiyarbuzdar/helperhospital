@@ -278,10 +278,18 @@ async function OrderTab({ page, q }: { page: number; q: string }) {
         </div>
         <button
           type="submit"
-          className="rounded-lg border border-edge bg-surface px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-canvas"
+          className="rounded-lg bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover"
         >
           Search
         </button>
+        {q && (
+          <Link
+            href="/dashboard/tests?tab=orders"
+            className="rounded-lg border border-edge px-4 py-2.5 text-sm font-medium text-ink transition hover:bg-canvas"
+          >
+            Clear
+          </Link>
+        )}
       </form>
 
       <div className="overflow-hidden rounded-2xl bg-surface shadow-sm ring-1 ring-edge">
