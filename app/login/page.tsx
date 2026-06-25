@@ -1,5 +1,6 @@
 import { Eye } from "lucide-react";
 import LoginForm from "./login-form";
+import Footer from "../_components/footer";
 
 export default function LoginPage() {
   return (
@@ -32,8 +33,9 @@ export default function LoginPage() {
       </aside>
 
       {/* Form panel */}
-      <section className="flex items-center justify-center bg-canvas p-6">
-        <div className="w-full max-w-sm rounded-2xl bg-surface p-8 shadow-sm ring-1 ring-edge">
+      <section className="flex min-h-screen flex-col bg-canvas">
+        <div className="flex flex-1 items-center justify-center p-6">
+          <div className="w-full max-w-sm rounded-2xl bg-surface p-8 shadow-sm ring-1 ring-edge">
           <div className="mb-8 lg:hidden">
             <div className="mb-3 flex h-11 w-11 items-center justify-center rounded-xl bg-brand">
               <Eye className="h-5 w-5 text-white" />
@@ -49,7 +51,9 @@ export default function LoginPage() {
           <div className="mt-6">
             <LoginForm />
           </div>
+          </div>
         </div>
+        <Footer />
       </section>
     </main>
   );

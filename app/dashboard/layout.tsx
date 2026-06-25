@@ -1,5 +1,6 @@
 import { getUser } from "@/lib/dal";
 import Sidebar from "./sidebar";
+import Footer from "../_components/footer";
 
 export default async function DashboardLayout({
   children,
@@ -14,7 +15,10 @@ export default async function DashboardLayout({
         name={user?.name ?? user?.username ?? "User"}
         role={user?.role ?? ""}
       />
-      <main className="min-w-0 flex-1">{children}</main>
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
+        <main className="flex-1">{children}</main>
+        <Footer />
+      </div>
     </div>
   );
 }
