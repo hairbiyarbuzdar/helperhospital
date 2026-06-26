@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { verifySession } from "@/lib/dal";
+import { logActivity } from "@/lib/activity";
 import type { SlipData, SlipItem } from "../patients/actions";
 
 export type ActionState = { ok?: boolean; error?: string } | undefined;
@@ -138,6 +139,12 @@ export async function createPatientTests(
       createdAt = payment.createdAt;
     }
     return { receiptNo, createdAt };
+  });
+
+  await logActivity({
+    action: "TESTS_ORDERED",
+    description: `Ordered ${items.length} test(s)`,
+    mrNumber: patient.mrNumber,
   });
 
   revalidatePath("/dashboard/tests");

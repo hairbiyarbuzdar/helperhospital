@@ -10,6 +10,7 @@ import {
   TestTube,
   FileText,
   Undo2,
+  History,
   ShieldCheck,
   LogOut,
 } from "lucide-react";
@@ -18,10 +19,11 @@ import { logout } from "@/app/actions/auth";
 const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/dashboard/patients", label: "Patients", icon: Users },
-  { href: "/dashboard/doctors", label: "Doctors", icon: Stethoscope },
   { href: "/dashboard/tests", label: "Tests", icon: TestTube },
+  { href: "/dashboard/doctors", label: "Doctors", icon: Stethoscope },
   { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/returns", label: "Fee Return", icon: Undo2 },
+  { href: "/dashboard/activity", label: "Activity Log", icon: History },
   { href: "/dashboard/users", label: "User Management", icon: ShieldCheck },
 ];
 

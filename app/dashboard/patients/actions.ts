@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
 import { verifySession } from "@/lib/dal";
+import { logActivity } from "@/lib/activity";
 
 export type ActionState = { ok?: boolean; error?: string } | undefined;
 
@@ -168,6 +169,12 @@ export async function createPatientWithBilling(
     return { mrNumber: patient.mrNumber!, receiptNo, createdAt };
   });
 
+  await logActivity({
+    action: "PATIENT_CREATED",
+    description: `Registered patient ${name}`,
+    mrNumber: result.mrNumber,
+  });
+
   revalidatePath("/dashboard/patients");
   revalidatePath("/dashboard/tests");
 
@@ -190,7 +197,16 @@ export async function createPatientWithBilling(
 
 export async function deletePatient(id: string) {
   await verifySession();
+  const patient = await prisma.patient.findUnique({
+    where: { id },
+    select: { name: true, mrNumber: true },
+  });
   await prisma.patient.delete({ where: { id } });
+  await logActivity({
+    action: "PATIENT_DELETED",
+    description: `Deleted patient ${patient?.name ?? ""}`.trim(),
+    mrNumber: patient?.mrNumber ?? null,
+  });
   revalidatePath("/dashboard/patients");
 }
 
@@ -252,7 +268,7 @@ export async function updatePatient(
     if (!doctor) return { error: "Selected doctor not found." };
   }
 
-  await prisma.patient.update({
+  const updated = await prisma.patient.update({
     where: { id },
     data: {
       name,
@@ -262,6 +278,12 @@ export async function updatePatient(
       cnic: cnic ?? null,
       doctorId: doctorId ?? null,
     },
+  });
+
+  await logActivity({
+    action: "PATIENT_UPDATED",
+    description: `Updated patient ${updated.name}`,
+    mrNumber: updated.mrNumber,
   });
 
   revalidatePath("/dashboard/patients");
@@ -421,6 +443,12 @@ export async function chargeExistingPatient(
       createdAt = payment.createdAt;
     }
     return { receiptNo, createdAt };
+  });
+
+  await logActivity({
+    action: "TESTS_ADDED",
+    description: `Added ${items.length + consultations.length} item(s) for patient`,
+    mrNumber: patient.mrNumber,
   });
 
   revalidatePath("/dashboard/patients");

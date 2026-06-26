@@ -49,6 +49,22 @@ model User {
   @@map("users")
 }
 
+// Audit trail of actions taken in the app. mrNumber/userName are snapshotted
+// so the log stays searchable and readable even if records change.
+model ActivityLog {
+  id          String   @id @default(cuid())
+  action      String
+  description String
+  mrNumber    String?
+  userId      String?
+  userName    String?
+  createdAt   DateTime @default(now())
+
+  @@index([mrNumber])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
 // A registered patient. `serial` is a DB sequence used to derive the MR
 // number (e.g. serial 1 -> "MR-20001"); `mrNumber` is then stored for search.
 model Patient {

@@ -109,7 +109,7 @@ export default async function ReturnsPage({
                             {refunded ? (
                               <span className="text-sm text-ink-muted">—</span>
                             ) : (
-                              <RefundButton paymentId={p.id} label={label} />
+                              <RefundButton paymentId={p.id} label={label} amount={p.amount} />
                             )}
                           </div>
                         </td>
