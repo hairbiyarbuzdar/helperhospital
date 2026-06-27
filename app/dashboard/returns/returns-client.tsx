@@ -8,6 +8,85 @@ import Modal from "../_components/modal";
 const fieldClass =
   "w-full rounded-lg border border-edge bg-surface px-3 py-2.5 text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-success-soft";
 
+const REASONS = [
+  "Doctor not available",
+  "Test not available",
+  "Patient discharged / cancelled visit",
+  "Duplicate payment",
+  "Wrong fee charged",
+  "Referred to another hospital",
+  "Other",
+] as const;
+
+type ReasonOption = (typeof REASONS)[number];
+
+/* ---------------------- Shared reason picker ---------------------------- */
+
+function ReasonPicker({
+  reason,
+  onChange,
+}: {
+  reason: string;
+  onChange: (v: string) => void;
+}) {
+  const [selected, setSelected] = useState<ReasonOption | "">("");
+  const [otherText, setOtherText] = useState("");
+
+  function pick(r: ReasonOption) {
+    setSelected(r);
+    onChange(r === "Other" ? otherText : r);
+  }
+
+  function handleOtherText(v: string) {
+    setOtherText(v);
+    onChange(v);
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <p className="text-sm font-medium text-ink">
+        Reason for return{" "}
+        <span className="text-ink-muted">(optional)</span>
+      </p>
+      <div className="flex flex-col gap-1.5">
+        {REASONS.map((r) => (
+          <label
+            key={r}
+            className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 transition ${
+              selected === r
+                ? "border-brand bg-success-soft"
+                : "border-edge hover:bg-canvas"
+            }`}
+          >
+            <input
+              type="radio"
+              className="hidden"
+              checked={selected === r}
+              onChange={() => pick(r)}
+            />
+            <span
+              className={`h-3.5 w-3.5 shrink-0 rounded-full border-2 transition ${
+                selected === r ? "border-brand bg-brand" : "border-edge"
+              }`}
+            />
+            <span className="text-sm font-medium text-ink">{r}</span>
+          </label>
+        ))}
+      </div>
+      {selected === "Other" && (
+        <input
+          type="text"
+          value={otherText}
+          onChange={(e) => handleOtherText(e.target.value)}
+          placeholder="Describe the reason…"
+          autoFocus
+          className={fieldClass}
+        />
+      )}
+    </div>
+  );
+}
+
 /* ---------------------- MR-based return (search bar) -------------------- */
 
 export function ReturnByMrForm() {
@@ -17,12 +96,14 @@ export function ReturnByMrForm() {
   );
   const [showModal, setShowModal] = useState(false);
   const [mr, setMr] = useState("");
+  const [reason, setReason] = useState("");
 
   function handleSearchSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const val = (new FormData(e.currentTarget).get("mr") as string ?? "").trim();
+    const val = ((new FormData(e.currentTarget).get("mr") as string) ?? "").trim();
     if (!val) return;
     setMr(val);
+    setReason("");
     setShowModal(true);
   }
 
@@ -33,7 +114,7 @@ export function ReturnByMrForm() {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
           <input
             name="mr"
-            placeholder="Enter MR number (e.g. 1)"
+            placeholder="Enter MR number (e.g. 0001-2026)"
             value={mr}
             onChange={(e) => setMr(e.target.value)}
             className="w-full rounded-lg border border-edge bg-surface py-2.5 pl-9 pr-3 text-ink outline-none focus:border-brand focus:ring-2 focus:ring-success-soft"
@@ -70,26 +151,15 @@ export function ReturnByMrForm() {
             className="flex flex-col gap-4"
           >
             <input type="hidden" name="mr" value={mr} />
+            <input type="hidden" name="reason" value={reason} />
 
             <p className="text-sm text-ink">
               You are about to return the fee for patient{" "}
-              <span className="font-semibold text-brand">MR {mr}</span>. This
+              <span className="font-semibold text-brand">{mr}</span>. This
               cannot be undone.
             </p>
 
-            <div className="flex flex-col gap-1.5">
-              <label htmlFor="mr-reason" className="text-sm font-medium text-ink">
-                Reason for return{" "}
-                <span className="text-ink-muted">(optional)</span>
-              </label>
-              <textarea
-                id="mr-reason"
-                name="reason"
-                rows={3}
-                placeholder="e.g. Test cancelled, duplicate charge…"
-                className={fieldClass}
-              />
-            </div>
+            <ReasonPicker reason={reason} onChange={setReason} />
 
             <div className="flex justify-end gap-2">
               <button
@@ -141,7 +211,10 @@ export function RefundButton({
     <>
       <button
         type="button"
-        onClick={() => { setReason(""); setOpen(true); }}
+        onClick={() => {
+          setReason("");
+          setOpen(true);
+        }}
         className="inline-flex items-center gap-1.5 rounded-lg border border-edge px-3 py-1.5 text-sm font-medium text-ink transition hover:bg-canvas"
       >
         <Undo2 className="h-4 w-4" />
@@ -153,28 +226,11 @@ export function RefundButton({
           <div className="flex flex-col gap-4">
             <p className="text-sm text-ink">
               You are about to return the fee for{" "}
-              <span className="font-semibold text-ink">{label}</span>.{" "}
-              This cannot be undone.
+              <span className="font-semibold text-ink">{label}</span>. This
+              cannot be undone.
             </p>
 
-            <div className="flex flex-col gap-1.5">
-              <label
-                htmlFor={`reason-${paymentId}`}
-                className="text-sm font-medium text-ink"
-              >
-                Reason for return{" "}
-                <span className="text-ink-muted">(optional)</span>
-              </label>
-              <textarea
-                id={`reason-${paymentId}`}
-                rows={3}
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                placeholder="e.g. Test cancelled, duplicate charge…"
-                className={fieldClass}
-                autoFocus
-              />
-            </div>
+            <ReasonPicker reason={reason} onChange={setReason} />
 
             <div className="flex justify-end gap-2">
               <button

@@ -1,7 +1,7 @@
 "use client";
 
-import { useActionState, useEffect, useState, useTransition } from "react";
-import { Plus, Pencil, Trash2 } from "lucide-react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import { Plus, Pencil, Trash2, Search } from "lucide-react";
 import { formatRs } from "@/lib/format";
 import {
   createPatientTests,
@@ -28,7 +28,80 @@ export type OrderView = {
   result: string | null;
 };
 
-/* ------------------------------- Order test ----------------------------- */
+/* ------------------------------- New test -------------------------------- */
+
+function PatientSearch({
+  patients,
+  onSelect,
+}: {
+  patients: PatientOption[];
+  onSelect: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [selectedId, setSelectedId] = useState("");
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  const hits = query.trim().length > 0
+    ? patients
+        .filter((p) =>
+          p.label.toLowerCase().includes(query.toLowerCase()),
+        )
+        .slice(0, 10)
+    : [];
+
+  function pick(p: PatientOption) {
+    setSelectedId(p.id);
+    setQuery(p.label);
+    setOpen(false);
+    onSelect(p.id);
+  }
+
+  function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setQuery(e.target.value);
+    setSelectedId("");
+    onSelect("");
+    setOpen(true);
+  }
+
+  return (
+    <div ref={wrapRef} className="relative">
+      <div className="relative">
+        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
+        <input
+          type="text"
+          value={query}
+          onChange={handleChange}
+          onFocus={() => query && setOpen(true)}
+          placeholder="Search by name or MR number…"
+          autoComplete="off"
+          className="w-full rounded-lg border border-edge bg-surface py-2.5 pl-9 pr-3 text-sm text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-success-soft"
+        />
+      </div>
+      {open && hits.length > 0 && (
+        <ul className="absolute z-20 mt-1 w-full overflow-hidden rounded-lg border border-edge bg-surface shadow-lg">
+          {hits.map((p) => (
+            <li key={p.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); pick(p); }}
+                className="w-full px-4 py-2.5 text-left text-sm text-ink transition hover:bg-canvas"
+              >
+                {p.label}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {open && query.trim().length > 0 && hits.length === 0 && (
+        <div className="absolute z-20 mt-1 w-full rounded-lg border border-edge bg-surface px-4 py-3 text-sm text-ink-muted shadow-lg">
+          No patients without tests found.
+        </div>
+      )}
+      <input type="hidden" name="patientId" value={selectedId} />
+    </div>
+  );
+}
 
 function OrderForm({
   patients,
@@ -39,6 +112,7 @@ function OrderForm({
   tests: TestOption[];
   onDone: () => void;
 }) {
+  const [selectedPatientId, setSelectedPatientId] = useState("");
   const [items, setItems] = useState<ChosenItem[]>([]);
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
@@ -55,7 +129,7 @@ function OrderForm({
     setError(undefined);
     const patientId = String(new FormData(e.currentTarget).get("patientId") ?? "");
     if (!patientId) {
-      setError("Select a patient.");
+      setError("Select a patient from the search results.");
       return;
     }
     if (items.length === 0) {
@@ -69,7 +143,7 @@ function OrderForm({
         items: items.map((i) => ({ testId: i.id, rate: i.rate })),
       });
       if (res?.ok) {
-        if (res.slip && win) writeSlip(win, res.slip);
+        if (res.slip) await writeSlip(win, res.slip);
         else win?.close();
         onDone();
       } else {
@@ -82,19 +156,14 @@ function OrderForm({
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="patientId" className="text-sm font-medium text-ink">
-          Patient
-        </label>
-        <select id="patientId" name="patientId" defaultValue="" className={fieldClass}>
-          <option value="" disabled>
-            Select patient
-          </option>
-          {patients.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.label}
-            </option>
-          ))}
-        </select>
+        <label className="text-sm font-medium text-ink">Patient</label>
+        {patients.length === 0 ? (
+          <p className="rounded-lg border border-edge bg-canvas px-3 py-3 text-sm text-ink-muted">
+            All registered patients already have tests. Register a new patient first.
+          </p>
+        ) : (
+          <PatientSearch patients={patients} onSelect={setSelectedPatientId} />
+        )}
       </div>
 
       <LineItems
@@ -106,9 +175,7 @@ function OrderForm({
 
       {summary.length > 0 && (
         <div className="rounded-xl border border-edge bg-canvas p-4">
-          <p className="text-xs font-semibold tracking-wider text-ink-muted">
-            SUMMARY
-          </p>
+          <p className="text-xs font-semibold tracking-wider text-ink-muted">SUMMARY</p>
           <ul className="mt-2 flex flex-col gap-1">
             {summary.map((r, idx) => (
               <li key={idx} className="flex justify-between text-sm">
@@ -125,9 +192,7 @@ function OrderForm({
       )}
 
       {error && (
-        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
-          {error}
-        </p>
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>
       )}
 
       <div className="mt-1 flex justify-end gap-2">
@@ -140,7 +205,7 @@ function OrderForm({
         </button>
         <button
           type="submit"
-          disabled={pending || patients.length === 0}
+          disabled={pending || !selectedPatientId}
           className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-60"
         >
           {pending
@@ -170,10 +235,10 @@ export function OrderTestButton({
         className="flex items-center gap-2 rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover"
       >
         <Plus className="h-4 w-4" />
-        Order test
+        New test
       </button>
       {open && (
-        <Modal title="Order tests" size="lg" onClose={() => setOpen(false)}>
+        <Modal title="New test" size="lg" onClose={() => setOpen(false)}>
           <OrderForm patients={patients} tests={tests} onDone={() => setOpen(false)} />
         </Modal>
       )}

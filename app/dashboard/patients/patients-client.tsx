@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { UserPlus, Trash2, Pencil, Printer } from "lucide-react";
+import { UserPlus, Trash2, Pencil, Printer, X } from "lucide-react";
 import { formatRs } from "@/lib/format";
 import {
   createPatientWithBilling,
@@ -22,36 +22,36 @@ export type FeeOption = CatalogOption;
 const fieldClass =
   "w-full rounded-lg border border-edge bg-surface px-3 py-2.5 text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-success-soft";
 
+type FeeRow = { id: string; name: string; rate: number };
+
 function AddPatientForm({
   doctors,
-  tests,
   fees,
   onDone,
 }: {
   doctors: DoctorOption[];
-  tests: TestOption[];
   fees: FeeOption[];
   onDone: () => void;
 }) {
-  const [testItems, setTestItems] = useState<ChosenItem[]>([]);
-  const [consultItems, setConsultItems] = useState<ChosenItem[]>([]);
+  // Pre-populate with every active consultation fee; user can remove any.
+  const [feeRows, setFeeRows] = useState<FeeRow[]>(
+    fees.map((f) => ({ id: f.id, name: f.name, rate: f.rate })),
+  );
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
 
-  const testMap = new Map(tests.map((t) => [t.id, t]));
-  const feeMap = new Map(fees.map((f) => [f.id, f]));
+  const total = feeRows.reduce((s, f) => s + f.rate, 0);
 
-  const summary = [
-    ...testItems.map((i) => ({
-      name: testMap.get(i.id)?.name ?? "Test",
-      rate: i.rate,
-    })),
-    ...consultItems.map((i) => ({
-      name: feeMap.get(i.id)?.name ?? "Consultation",
-      rate: i.rate,
-    })),
-  ];
-  const total = summary.reduce((s, r) => s + r.rate, 0);
+  function removeFee(id: string) {
+    setFeeRows((prev) => prev.filter((f) => f.id !== id));
+  }
+
+  function updateRate(id: string, raw: string) {
+    const n = parseInt(raw, 10);
+    setFeeRows((prev) =>
+      prev.map((f) => (f.id === id ? { ...f, rate: isNaN(n) ? 0 : Math.max(0, n) } : f)),
+    );
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -64,15 +64,14 @@ function AddPatientForm({
       mobile: String(fd.get("mobile") ?? ""),
       cnic: String(fd.get("cnic") ?? ""),
       doctorId: String(fd.get("doctorId") ?? ""),
-      items: testItems.map((i) => ({ testId: i.id, rate: i.rate })),
-      consultations: consultItems.map((i) => ({ feeId: i.id, rate: i.rate })),
+      items: [],
+      consultations: feeRows.map((f) => ({ feeId: f.id, rate: f.rate })),
     };
-    // Open the print window synchronously so popup blockers allow it.
     const win = openSlipWindow();
     startTransition(async () => {
       const res = await createPatientWithBilling(input);
       if (res?.ok) {
-        if (res.slip && win) writeSlip(win, res.slip);
+        if (res.slip) await writeSlip(win, res.slip);
         else win?.close();
         onDone();
       } else {
@@ -103,9 +102,7 @@ function AddPatientForm({
             Gender
           </label>
           <select id="gender" name="gender" defaultValue="" className={fieldClass}>
-            <option value="" disabled>
-              Select
-            </option>
+            <option value="" disabled>Select</option>
             <option value="MALE">Male</option>
             <option value="FEMALE">Female</option>
             <option value="OTHER">Other</option>
@@ -118,9 +115,7 @@ function AddPatientForm({
           <select id="doctorId" name="doctorId" defaultValue="" className={fieldClass}>
             <option value="">— None —</option>
             {doctors.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
+              <option key={d.id} value={d.id}>{d.name}</option>
             ))}
           </select>
         </div>
@@ -135,9 +130,7 @@ function AddPatientForm({
             maxLength={11}
             placeholder="03xxxxxxxxx"
             onInput={(e) => {
-              e.currentTarget.value = e.currentTarget.value
-                .replace(/\D/g, "")
-                .slice(0, 11);
+              e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "").slice(0, 11);
             }}
             className={fieldClass}
           />
@@ -150,31 +143,51 @@ function AddPatientForm({
         </div>
       </div>
 
-      <LineItems
-        title="Tests"
-        catalog={tests}
-        emptyHint="No tests in the catalog yet — add some in the Tests module to bill them here."
-        onChange={setTestItems}
-      />
-
-      <LineItems
-        title="Consultation"
-        catalog={fees}
-        emptyHint="No consultation fees yet — add some in the Consultation Fees tab."
-        onChange={setConsultItems}
-      />
+      {/* Consultation fees — pre-loaded, removable */}
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium text-ink">Consultation Fees</p>
+        {feeRows.length === 0 ? (
+          <p className="rounded-lg border border-edge bg-canvas px-3 py-3 text-sm text-ink-muted">
+            No consultation fees selected.
+          </p>
+        ) : (
+          <div className="flex flex-col gap-1.5">
+            {feeRows.map((f) => (
+              <div
+                key={f.id}
+                className="flex items-center gap-3 rounded-lg border border-edge bg-canvas px-3 py-2"
+              >
+                <span className="flex-1 text-sm font-medium text-ink">{f.name}</span>
+                <input
+                  type="number"
+                  value={f.rate}
+                  min={0}
+                  onChange={(e) => updateRate(f.id, e.target.value)}
+                  className="w-24 rounded-md border border-edge bg-surface px-2 py-1 text-right text-sm text-ink outline-none focus:border-brand focus:ring-1 focus:ring-success-soft"
+                />
+                <button
+                  type="button"
+                  onClick={() => removeFee(f.id)}
+                  title="Remove fee"
+                  className="rounded-md p-1 text-ink-muted transition hover:bg-danger-soft hover:text-danger"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Summary */}
-      {summary.length > 0 && (
+      {feeRows.length > 0 && (
         <div className="rounded-xl border border-edge bg-canvas p-4">
-          <p className="text-xs font-semibold tracking-wider text-ink-muted">
-            SUMMARY
-          </p>
+          <p className="text-xs font-semibold tracking-wider text-ink-muted">SUMMARY</p>
           <ul className="mt-2 flex flex-col gap-1">
-            {summary.map((r, idx) => (
-              <li key={idx} className="flex justify-between text-sm">
-                <span className="text-ink">{r.name}</span>
-                <span className="font-medium text-ink">{formatRs(r.rate)}</span>
+            {feeRows.map((f) => (
+              <li key={f.id} className="flex justify-between text-sm">
+                <span className="text-ink">{f.name}</span>
+                <span className="font-medium text-ink">{formatRs(f.rate)}</span>
               </li>
             ))}
           </ul>
@@ -186,9 +199,7 @@ function AddPatientForm({
       )}
 
       {error && (
-        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">
-          {error}
-        </p>
+        <p className="rounded-lg bg-danger-soft px-3 py-2 text-sm text-danger">{error}</p>
       )}
 
       <div className="mt-1 flex justify-end gap-2">
@@ -204,11 +215,7 @@ function AddPatientForm({
           disabled={pending}
           className="rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-60"
         >
-          {pending
-            ? "Saving…"
-            : total > 0
-              ? `Save & print · ${formatRs(total)}`
-              : "Save & print"}
+          {pending ? "Saving…" : total > 0 ? `Save & print · ${formatRs(total)}` : "Save & print"}
         </button>
       </div>
     </form>
@@ -217,14 +224,12 @@ function AddPatientForm({
 
 export function AddPatientButton({
   doctors,
-  tests,
   fees,
   nextMr,
 }: {
   doctors: DoctorOption[];
-  tests: TestOption[];
   fees: FeeOption[];
-  nextMr: number;
+  nextMr: string;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -245,7 +250,6 @@ export function AddPatientButton({
         >
           <AddPatientForm
             doctors={doctors}
-            tests={tests}
             fees={fees}
             onDone={() => setOpen(false)}
           />
@@ -300,7 +304,7 @@ export function PrintPatientButton({ id }: { id: string }) {
     const win = openSlipWindow();
     startTransition(async () => {
       const slip = await getPatientSlip(id);
-      if (slip && win) writeSlip(win, slip);
+      if (slip) await writeSlip(win, slip);
       else win?.close();
     });
   }

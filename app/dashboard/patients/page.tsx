@@ -9,7 +9,6 @@ import {
   EditPatientButton,
   PrintPatientButton,
 } from "./patients-client";
-import { ExistingPatientButton } from "./existing-patient-client";
 import {
   AddConsultationFeeButton,
   DeleteConsultationFeeButton,
@@ -106,16 +105,11 @@ async function PatientActions({
 }: {
   fees: { id: string; name: string; rate: number }[];
 }) {
-  const [doctors, tests, seq] = await Promise.all([
+  const [doctors, seq] = await Promise.all([
     prisma.doctor.findMany({
       where: { isActive: true },
       orderBy: { name: "asc" },
       select: { id: true, name: true },
-    }),
-    prisma.testCatalog.findMany({
-      where: { isActive: true },
-      orderBy: { name: "asc" },
-      select: { id: true, name: true, rate: true },
     }),
     // Peek at the next MR (patient serial) without consuming the sequence.
     prisma.$queryRaw<
@@ -124,16 +118,17 @@ async function PatientActions({
   ]);
 
   const s = seq[0];
-  const nextMr = s
+  const nextSerial = s
     ? s.is_called
       ? Number(s.last_value) + 1
       : Number(s.last_value)
     : 1;
+  const pktYear = new Date(Date.now() + 5 * 60 * 60 * 1000).getUTCFullYear();
+  const nextMr = `${String(nextSerial).padStart(4, "0")}-${pktYear}`;
 
   return (
     <div className="flex flex-wrap gap-3">
-      <ExistingPatientButton tests={tests} fees={fees} />
-      <AddPatientButton doctors={doctors} tests={tests} fees={fees} nextMr={nextMr} />
+      <AddPatientButton doctors={doctors} fees={fees} nextMr={nextMr} />
     </div>
   );
 }

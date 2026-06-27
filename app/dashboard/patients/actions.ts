@@ -129,9 +129,10 @@ export async function createPatientWithBilling(
       data: { name, age, gender, mobile, cnic, doctorId },
     });
     // MR number is simply the patient's sequential serial (1, 2, 3, …).
+    const pktYear = new Date(Date.now() + 5 * 60 * 60 * 1000).getUTCFullYear();
     const patient = await tx.patient.update({
       where: { id: created.id },
-      data: { mrNumber: String(created.serial) },
+      data: { mrNumber: `${String(created.serial).padStart(4, "0")}-${pktYear}` },
     });
 
     if (items.length > 0) {

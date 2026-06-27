@@ -213,7 +213,9 @@ async function CatalogTab({ page }: { page: number }) {
 
 async function OrderTabButton() {
   const [patients, tests] = await Promise.all([
+    // Only patients who have no tests ordered yet.
     prisma.patient.findMany({
+      where: { tests: { none: {} } },
       orderBy: { serial: "desc" },
       select: { id: true, name: true, mrNumber: true },
     }),
@@ -297,7 +299,7 @@ async function OrderTab({ page, q }: { page: number; q: string }) {
           <p className="px-6 py-16 text-center text-sm text-ink-muted">
             {q
               ? "No test orders match your search."
-              : "No tests ordered yet. Click Order test to add one."}
+              : "No tests ordered yet. Click New test to add one."}
           </p>
         ) : (
           <>
@@ -305,7 +307,8 @@ async function OrderTab({ page, q }: { page: number; q: string }) {
               <table className="w-full">
                 <thead>
                   <tr className="border-b border-edge text-left text-xs font-semibold tracking-wider text-ink-muted">
-                    <th className="px-6 py-3">PATIENT</th>
+                    <th className="px-6 py-3">MR NUMBER</th>
+                    <th className="px-6 py-3">NAME</th>
                     <th className="px-6 py-3">TEST</th>
                     <th className="px-6 py-3">RATE</th>
                     <th className="px-6 py-3">STATUS</th>
@@ -328,12 +331,8 @@ async function OrderTab({ page, q }: { page: number; q: string }) {
                     };
                     return (
                       <tr key={o.id} className="border-b border-edge last:border-0">
-                        <td className="px-6 py-4">
-                          <p className="font-medium text-ink">{o.patient.name}</p>
-                          <p className="text-xs font-semibold text-brand">
-                            {o.patient.mrNumber}
-                          </p>
-                        </td>
+                        <td className="px-6 py-4 font-semibold text-brand">{o.patient.mrNumber ?? "—"}</td>
+                        <td className="px-6 py-4 font-bold uppercase text-ink">{o.patient.name}</td>
                         <td className="px-6 py-4 text-ink">{o.testName}</td>
                         <td className="px-6 py-4 font-semibold text-ink">
                           {formatRs(o.rate)}

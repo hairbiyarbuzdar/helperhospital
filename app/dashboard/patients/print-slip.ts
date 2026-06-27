@@ -1,5 +1,7 @@
 import type { SlipData } from "./actions";
 
+const STORAGE_KEY = "hh_preferred_printer";
+
 function esc(s: string | number | null | undefined): string {
   return String(s ?? "").replace(
     /[&<>"]/g,
@@ -49,7 +51,7 @@ function slipBlock(slip: SlipData, copyLabel: string): string {
   </div>`;
 }
 
-function buildHtml(slip: SlipData): string {
+export function buildSlipHtml(slip: SlipData): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Test Slip ${esc(slip.mrNumber)}</title>
   <style>
     @page { size: A5; margin: 8mm; }
@@ -84,8 +86,27 @@ function buildHtml(slip: SlipData): string {
   </body></html>`;
 }
 
-// Open a window synchronously (keeps it user-initiated so popup blockers allow
-// it); call before awaiting the server action.
+async function tryDirectPrint(html: string): Promise<boolean> {
+  const printerName =
+    typeof localStorage !== "undefined"
+      ? (localStorage.getItem(STORAGE_KEY) ?? "")
+      : "";
+  if (!printerName) return false;
+  try {
+    const res = await fetch("/api/direct-print", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ html, printerName }),
+    });
+    const data = (await res.json()) as { ok: boolean };
+    return data.ok === true;
+  } catch {
+    return false;
+  }
+}
+
+// Open a window synchronously (popup blocker workaround). Call before awaiting
+// the server action; pass null/undefined to skip (when direct print is used).
 export function openSlipWindow(): Window | null {
   const w = window.open("", "_blank", "width=620,height=820");
   if (w) {
@@ -96,8 +117,15 @@ export function openSlipWindow(): Window | null {
   return w;
 }
 
-export function writeSlip(w: Window, slip: SlipData) {
+export async function writeSlip(w: Window | null, slip: SlipData) {
+  const html = buildSlipHtml(slip);
+  const directOk = await tryDirectPrint(html);
+  if (directOk) {
+    if (w) w.close();
+    return;
+  }
+  if (!w) return;
   w.document.open();
-  w.document.write(buildHtml(slip));
+  w.document.write(html);
   w.document.close();
 }

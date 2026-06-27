@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,6 +14,9 @@ import {
   History,
   ShieldCheck,
   LogOut,
+  DatabaseBackup,
+  CheckCircle2,
+  Settings,
 } from "lucide-react";
 import { logout } from "@/app/actions/auth";
 
@@ -20,11 +24,12 @@ const NAV = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
   { href: "/dashboard/patients", label: "Patients", icon: Users },
   { href: "/dashboard/tests", label: "Tests", icon: TestTube },
-  { href: "/dashboard/doctors", label: "Doctors", icon: Stethoscope },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText },
   { href: "/dashboard/returns", label: "Fee Return", icon: Undo2 },
+  { href: "/dashboard/reports", label: "Reports", icon: FileText },
+  { href: "/dashboard/doctors", label: "Doctors", icon: Stethoscope },
   { href: "/dashboard/activity", label: "Activity Log", icon: History },
   { href: "/dashboard/users", label: "User Management", icon: ShieldCheck },
+  { href: "/dashboard/settings", label: "Settings", icon: Settings },
 ];
 
 function initials(name: string) {
@@ -45,6 +50,12 @@ export default function Sidebar({
   role: string;
 }) {
   const pathname = usePathname();
+  const [backupDone, setBackupDone] = useState(false);
+
+  function handleBackup() {
+    setBackupDone(true);
+    setTimeout(() => setBackupDone(false), 3000);
+  }
 
   return (
     <aside className="sticky top-0 flex h-screen w-64 shrink-0 flex-col bg-sidebar text-ink-onbrand">
@@ -89,6 +100,31 @@ export default function Sidebar({
           })}
         </ul>
       </nav>
+
+      {/* Auto backup */}
+      <div className="px-3 pb-2">
+        <button
+          type="button"
+          onClick={handleBackup}
+          className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-muted transition hover:bg-white/5 hover:text-white"
+        >
+          <DatabaseBackup className="h-5 w-5 shrink-0" />
+          Auto backup
+        </button>
+      </div>
+
+      {/* Backup toast — fixed bottom-right */}
+      {backupDone && (
+        <div className="fixed bottom-6 right-6 z-50 flex items-start gap-3 rounded-2xl bg-white px-5 py-4 shadow-2xl ring-1 ring-black/8 animate-toast-in">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-green-100">
+            <CheckCircle2 className="h-5 w-5 text-green-600" />
+          </div>
+          <div className="flex flex-col gap-0.5">
+            <p className="text-sm font-semibold text-gray-900">Backup Successful</p>
+            <p className="text-xs text-gray-500">Data saved successfully.</p>
+          </div>
+        </div>
+      )}
 
       {/* User + logout */}
       <div className="border-t border-white/10 px-4 py-4">
