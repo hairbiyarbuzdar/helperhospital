@@ -65,8 +65,8 @@ export default function Sidebar({
           <Eye className="h-5 w-5 text-white" />
         </div>
         <div className="leading-tight">
-          <p className="font-bold">Helper Hospital</p>
-          <p className="text-xs text-sidebar-muted">Management System</p>
+          <p className="font-bold text-sm">Helper's Eye Teaching Hospital</p>
+          <p className="text-xs text-sidebar-muted">Quetta</p>
         </div>
       </div>
 
