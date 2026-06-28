@@ -151,7 +151,7 @@ function ChargeForm({
         consultations: consultItems.map((i) => ({ feeId: i.id, rate: i.rate })),
       });
       if (res?.ok) {
-        if (res.slip) await writeSlip(win, res.slip);
+        if (res.slip && win) writeSlip(win, res.slip);
         else win?.close();
         onDone();
       } else {

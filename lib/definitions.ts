@@ -18,5 +18,6 @@ export type LoginFormState =
 export type SessionPayload = {
   userId: string;
   role: string;
+  modules: string[];
   expiresAt: Date;
 };

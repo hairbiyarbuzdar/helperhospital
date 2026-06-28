@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "users" ADD COLUMN     "modules" TEXT[] DEFAULT ARRAY[]::TEXT[];

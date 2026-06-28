@@ -14,6 +14,7 @@ export default async function DashboardLayout({
       <Sidebar
         name={user?.name ?? user?.username ?? "User"}
         role={user?.role ?? ""}
+        modules={user?.modules ?? []}
       />
       <div className="flex min-h-screen min-w-0 flex-1 flex-col">
         <main className="flex-1">{children}</main>

@@ -71,7 +71,7 @@ function AddPatientForm({
     startTransition(async () => {
       const res = await createPatientWithBilling(input);
       if (res?.ok) {
-        if (res.slip) await writeSlip(win, res.slip);
+        if (res.slip && win) writeSlip(win, res.slip);
         else win?.close();
         onDone();
       } else {
@@ -304,7 +304,7 @@ export function PrintPatientButton({ id }: { id: string }) {
     const win = openSlipWindow();
     startTransition(async () => {
       const slip = await getPatientSlip(id);
-      if (slip) await writeSlip(win, slip);
+      if (slip && win) writeSlip(win, slip);
       else win?.close();
     });
   }

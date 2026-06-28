@@ -1,7 +1,6 @@
 "use server";
 
 import bcrypt from "bcryptjs";
-import { execSync } from "child_process";
 import prisma from "@/lib/prisma";
 import { verifySession } from "@/lib/dal";
 import { logActivity } from "@/lib/activity";
@@ -39,20 +38,4 @@ export async function changePassword(
   });
 
   return { ok: true };
-}
-
-export async function getSystemPrinters(): Promise<string[]> {
-  try {
-    if (process.platform !== "win32") return [];
-    const raw = execSync(
-      'powershell -NonInteractive -Command "Get-Printer | Select-Object -ExpandProperty Name | ConvertTo-Json -Compress"',
-      { timeout: 6000, encoding: "utf8" },
-    ).trim();
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) return parsed as string[];
-    if (typeof parsed === "string") return [parsed];
-    return [];
-  } catch {
-    return [];
-  }
 }

@@ -1,12 +1,8 @@
 import { ShieldCheck } from "lucide-react";
 import prisma from "@/lib/prisma";
 import { verifySession } from "@/lib/dal";
-import { ROLE_LABEL, ROLE_MODULES, STAFF_ROLES } from "./constants";
-import {
-  CreateUserButton,
-  EditUserButton,
-  DeleteUserButton,
-} from "./users-client";
+import { MODULES } from "./constants";
+import { CreateUserButton, EditUserButton, DeleteUserButton } from "./users-client";
 
 export const dynamic = "force-dynamic";
 
@@ -29,14 +25,13 @@ export default async function UsersPage() {
     select: {
       id: true,
       username: true,
-      name: true,
       role: true,
+      modules: true,
       isActive: true,
       createdAt: true,
     },
   });
 
-  // Split: admin row(s) at top as read-only, staff below as manageable.
   const admins = users.filter((u) => u.role === "ADMIN");
   const staff = users.filter((u) => u.role !== "ADMIN");
 
@@ -45,9 +40,7 @@ export default async function UsersPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold text-ink">User Management</h1>
-          <p className="mt-1 text-ink-muted">
-            Manage staff accounts and their module access.
-          </p>
+          <p className="mt-1 text-ink-muted">Manage staff accounts and their module access.</p>
         </div>
         {isAdmin && <CreateUserButton />}
       </div>
@@ -58,7 +51,7 @@ export default async function UsersPage() {
         </p>
       )}
 
-      {/* Admin accounts (read-only) */}
+      {/* Admin row */}
       {admins.length > 0 && (
         <section className="mt-8">
           <p className="mb-3 flex items-center gap-2 text-xs font-semibold tracking-wider text-ink-muted">
@@ -70,8 +63,7 @@ export default async function UsersPage() {
               <thead>
                 <tr className="border-b border-edge text-left text-xs font-semibold tracking-wider text-ink-muted">
                   <th className="px-6 py-3">USERNAME</th>
-                  <th className="px-6 py-3">FULL NAME</th>
-                  <th className="px-6 py-3">ROLE</th>
+                  <th className="px-6 py-3">ACCESS</th>
                   <th className="px-6 py-3">CREATED</th>
                   <th className="px-6 py-3">STATUS</th>
                 </tr>
@@ -80,15 +72,12 @@ export default async function UsersPage() {
                 {admins.map((u) => (
                   <tr key={u.id} className="border-b border-edge last:border-0">
                     <td className="px-6 py-4 font-semibold text-ink">{u.username}</td>
-                    <td className="px-6 py-4 text-ink">{u.name ?? "—"}</td>
                     <td className="px-6 py-4">
                       <span className="rounded-full bg-brand px-3 py-1 text-xs font-semibold text-white">
-                        {ROLE_LABEL[u.role] ?? u.role}
+                        Full access
                       </span>
                     </td>
-                    <td className="px-6 py-4 text-ink-muted">
-                      {dateTimeFmt.format(u.createdAt)}
-                    </td>
+                    <td className="px-6 py-4 text-ink-muted">{dateTimeFmt.format(u.createdAt)}</td>
                     <td className="px-6 py-4">
                       <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-semibold text-success">
                         Active
@@ -102,16 +91,14 @@ export default async function UsersPage() {
         </section>
       )}
 
-      {/* Staff accounts */}
+      {/* Staff */}
       <section className="mt-8">
         <div className="mb-3 flex items-center justify-between">
           <p className="flex items-center gap-2 text-xs font-semibold tracking-wider text-ink-muted">
             <ShieldCheck className="h-4 w-4" />
             STAFF ACCOUNTS
           </p>
-          <span className="text-sm font-semibold text-ink-muted">
-            {staff.length}
-          </span>
+          <span className="text-sm font-semibold text-ink-muted">{staff.length}</span>
         </div>
 
         <div className="overflow-hidden rounded-2xl bg-surface shadow-sm ring-1 ring-edge">
@@ -119,10 +106,7 @@ export default async function UsersPage() {
             <p className="px-6 py-16 text-center text-sm text-ink-muted">
               No staff users yet.{" "}
               {isAdmin && (
-                <>
-                  Click <span className="font-medium text-ink">Add user</span> to
-                  create the first one.
-                </>
+                <>Click <span className="font-medium text-ink">Add user</span> to create the first one.</>
               )}
             </p>
           ) : (
@@ -130,8 +114,6 @@ export default async function UsersPage() {
               <thead>
                 <tr className="border-b border-edge text-left text-xs font-semibold tracking-wider text-ink-muted">
                   <th className="px-6 py-3">USERNAME</th>
-                  <th className="px-6 py-3">FULL NAME</th>
-                  <th className="px-6 py-3">ROLE</th>
                   <th className="px-6 py-3">MODULE ACCESS</th>
                   <th className="px-6 py-3">CREATED</th>
                   <th className="px-6 py-3">STATUS</th>
@@ -141,25 +123,31 @@ export default async function UsersPage() {
               <tbody>
                 {staff.map((u) => (
                   <tr key={u.id} className="border-b border-edge last:border-0">
-                    <td className="px-6 py-4 font-semibold text-ink">
-                      {u.username}
-                    </td>
-                    <td className="px-6 py-4 text-ink">{u.name ?? "—"}</td>
+                    <td className="px-6 py-4 font-semibold text-ink">{u.username}</td>
                     <td className="px-6 py-4">
-                      <RoleBadge role={u.role} />
+                      <div className="flex flex-wrap gap-1">
+                        {u.modules.length === 0 ? (
+                          <span className="text-xs text-ink-muted">No access</span>
+                        ) : (
+                          u.modules.map((key) => {
+                            const m = MODULES.find((x) => x.key === key);
+                            return (
+                              <span
+                                key={key}
+                                className="rounded-full bg-surface-soft px-2.5 py-0.5 text-xs font-medium text-ink-muted ring-1 ring-edge"
+                              >
+                                {m?.label ?? key}
+                              </span>
+                            );
+                          })
+                        )}
+                      </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <ModulePills role={u.role} />
-                    </td>
-                    <td className="px-6 py-4 text-ink-muted">
-                      {dateTimeFmt.format(u.createdAt)}
-                    </td>
+                    <td className="px-6 py-4 text-ink-muted">{dateTimeFmt.format(u.createdAt)}</td>
                     <td className="px-6 py-4">
                       <span
                         className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                          u.isActive
-                            ? "bg-success-soft text-success"
-                            : "bg-warning-soft text-warning"
+                          u.isActive ? "bg-success-soft text-success" : "bg-warning-soft text-warning"
                         }`}
                       >
                         {u.isActive ? "Active" : "Inactive"}
@@ -169,22 +157,10 @@ export default async function UsersPage() {
                       <td className="px-6 py-4 text-right">
                         <div className="flex justify-end gap-1">
                           <EditUserButton
-                            user={{
-                              id: u.id,
-                              username: u.username,
-                              name: u.name,
-                              role: u.role,
-                              isActive: u.isActive,
-                            }}
+                            user={{ id: u.id, username: u.username, modules: u.modules, isActive: u.isActive }}
                           />
                           <DeleteUserButton
-                            user={{
-                              id: u.id,
-                              username: u.username,
-                              name: u.name,
-                              role: u.role,
-                              isActive: u.isActive,
-                            }}
+                            user={{ id: u.id, username: u.username, modules: u.modules, isActive: u.isActive }}
                           />
                         </div>
                       </td>
@@ -196,40 +172,6 @@ export default async function UsersPage() {
           )}
         </div>
       </section>
-    </div>
-  );
-}
-
-const ROLE_COLORS: Record<string, string> = {
-  DOCTOR: "bg-canvas text-brand border border-edge",
-  NURSE: "bg-canvas text-ink border border-edge",
-  RECEPTIONIST: "bg-canvas text-ink border border-edge",
-  PHARMACIST: "bg-canvas text-ink border border-edge",
-};
-
-function RoleBadge({ role }: { role: string }) {
-  return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-semibold ${ROLE_COLORS[role] ?? "bg-canvas text-ink border border-edge"}`}
-    >
-      {ROLE_LABEL[role] ?? role}
-    </span>
-  );
-}
-
-function ModulePills({ role }: { role: string }) {
-  const staffRole = STAFF_ROLES.find((r) => r === role);
-  const modules = staffRole ? ROLE_MODULES[staffRole] : [];
-  return (
-    <div className="flex flex-wrap gap-1">
-      {modules.map((m) => (
-        <span
-          key={m}
-          className="rounded-full bg-surface-soft px-2 py-0.5 text-xs text-ink-muted ring-1 ring-edge"
-        >
-          {m}
-        </span>
-      ))}
     </div>
   );
 }

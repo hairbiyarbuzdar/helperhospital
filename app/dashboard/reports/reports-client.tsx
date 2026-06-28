@@ -1,20 +1,23 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { CalendarDays, TestTube, ChevronRight, Printer } from "lucide-react";
+import { CalendarDays, TestTube, Undo2, ChevronRight, Printer } from "lucide-react";
 import {
   generateTodayReport,
   generateTestReport,
+  generateReturnReport,
   type TodayReport,
   type TestReport,
+  type ReturnReport,
 } from "./actions";
-import { printTodayReport, printTestReport } from "./print-report";
+import { printTodayReport, printTestReport, printReturnReport } from "./print-report";
 import { formatRs } from "@/lib/format";
 
-type ReportType = "today" | "tests";
+type ReportType = "today" | "tests" | "returns";
 type ReportResult =
   | { type: "today"; data: TodayReport }
-  | { type: "tests"; data: TestReport };
+  | { type: "tests"; data: TestReport }
+  | { type: "returns"; data: ReturnReport };
 
 const CARDS: {
   id: ReportType;
@@ -33,6 +36,12 @@ const CARDS: {
     icon: TestTube,
     title: "Test Report",
     desc: "All tests ordered in a date range, grouped by test name with revenue.",
+  },
+  {
+    id: "returns",
+    icon: Undo2,
+    title: "Fee Return Report",
+    desc: "All patients who received a fee refund within the selected date range.",
   },
 ];
 
@@ -271,6 +280,85 @@ function TestResult({ data }: { data: TestReport }) {
   );
 }
 
+// ─── Fee Return Report result ─────────────────────────────────────────────────
+
+function ReturnResult({ data }: { data: ReturnReport }) {
+  const fmt = (s: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Karachi",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(`${s}T12:00:00+05:00`));
+
+  const fmtDT = (iso: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Karachi",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(iso));
+
+  return (
+    <div>
+      <p className="mb-4 text-sm text-ink-muted">
+        Results from <span className="font-semibold text-ink">{fmt(data.from)}</span> to{" "}
+        <span className="font-semibold text-ink">{fmt(data.to)}</span>
+      </p>
+
+      <div className="grid grid-cols-2 gap-3">
+        <Stat label="TOTAL RETURNS" value={String(data.totalReturns)} />
+        <Stat label="TOTAL AMOUNT RETURNED" value={formatRs(data.totalAmount)} accent="danger" />
+      </div>
+
+      {data.rows.length === 0 ? (
+        <p className="mt-8 text-center text-sm text-ink-muted">
+          No fee returns in this period.
+        </p>
+      ) : (
+        <div className="mt-6 overflow-hidden rounded-2xl bg-surface shadow-sm ring-1 ring-edge">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-edge text-left text-xs font-semibold tracking-wider text-ink-muted">
+                <th className="px-5 py-3">MR #</th>
+                <th className="px-5 py-3">PATIENT</th>
+                <th className="px-5 py-3 text-right">AMOUNT</th>
+                <th className="px-5 py-3 text-right">RETURN DATE</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r, i) => (
+                <tr key={i} className="border-b border-edge last:border-0">
+                  <td className="px-5 py-3 text-xs font-semibold text-brand">{r.mrNumber}</td>
+                  <td className="px-5 py-3 font-semibold uppercase text-ink">{r.name}</td>
+                  <td className="px-5 py-3 text-right font-semibold text-danger">
+                    {formatRs(r.amount)}
+                  </td>
+                  <td className="px-5 py-3 text-right text-sm text-ink-muted">
+                    {fmtDT(r.refundedAt)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t border-edge bg-canvas">
+                <td colSpan={2} className="px-5 py-3 text-sm font-semibold text-ink">Total</td>
+                <td className="px-5 py-3 text-right font-bold text-danger">
+                  {formatRs(data.totalAmount)}
+                </td>
+                <td />
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 
 export default function ReportsClient() {
@@ -312,6 +400,14 @@ export default function ReportsClient() {
         const res = await generateTestReport(from, to);
         if (res.ok) setResult({ type: "tests", data: res.data });
         else setError(res.error);
+      } else if (selected === "returns") {
+        if (from > to) {
+          setError("'Date from' must be before 'date to'.");
+          return;
+        }
+        const res = await generateReturnReport(from, to);
+        if (res.ok) setResult({ type: "returns", data: res.data });
+        else setError(res.error);
       }
     });
   }
@@ -322,7 +418,7 @@ export default function ReportsClient() {
   return (
     <div>
       {/* Report cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         {CARDS.map(({ id, icon: Icon, title, desc }) => {
           const active = selected === id;
           return (
@@ -384,7 +480,7 @@ export default function ReportsClient() {
               )}
             </div>
 
-            {selected === "tests" && (
+            {(selected === "tests" || selected === "returns") && (
               <>
                 <div>
                   <p className="mb-1.5 text-xs font-semibold tracking-wider text-ink-muted">
@@ -427,9 +523,10 @@ export default function ReportsClient() {
               {result && (
                 <button
                   type="button"
-                  onClick={async () => {
-                    if (result.type === "today") await printTodayReport(result.data);
-                    else await printTestReport(result.data);
+                  onClick={() => {
+                    if (result.type === "today") printTodayReport(result.data);
+                    else if (result.type === "tests") printTestReport(result.data);
+                    else printReturnReport(result.data);
                   }}
                   className="flex items-center gap-2 rounded-lg border border-edge px-4 py-2 text-sm font-medium text-ink transition hover:bg-canvas"
                 >
@@ -461,6 +558,7 @@ export default function ReportsClient() {
         <div className="mt-6">
           {result.type === "today" && <TodayResult data={result.data} />}
           {result.type === "tests" && <TestResult data={result.data} />}
+          {result.type === "returns" && <ReturnResult data={result.data} />}
         </div>
       )}
     </div>

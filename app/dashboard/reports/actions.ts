@@ -91,6 +91,60 @@ export async function generateTodayReport(
   }
 }
 
+// ─── Fee Return Report ────────────────────────────────────────────────────────
+
+export type ReturnRow = {
+  mrNumber: string;
+  name: string;
+  amount: number;
+  refundedAt: string; // ISO string
+};
+
+export type ReturnReport = {
+  from: string;
+  to: string;
+  totalReturns: number;
+  totalAmount: number;
+  rows: ReturnRow[];
+};
+
+export async function generateReturnReport(
+  from: string,
+  to: string,
+): Promise<{ ok: true; data: ReturnReport } | { ok: false; error: string }> {
+  try {
+    await verifySession();
+    const start = new Date(`${from}T00:00:00+05:00`);
+    const end = new Date(`${to}T23:59:59.999+05:00`);
+
+    const payments = await prisma.payment.findMany({
+      where: { refundedAt: { gte: start, lte: end } },
+      include: { patient: { select: { mrNumber: true, name: true } } },
+      orderBy: { refundedAt: "asc" },
+    });
+
+    const rows: ReturnRow[] = payments.map((p) => ({
+      mrNumber: p.patient.mrNumber ?? "—",
+      name: p.patient.name,
+      amount: p.amount,
+      refundedAt: p.refundedAt!.toISOString(),
+    }));
+
+    return {
+      ok: true,
+      data: {
+        from,
+        to,
+        totalReturns: rows.length,
+        totalAmount: rows.reduce((s, r) => s + r.amount, 0),
+        rows,
+      },
+    };
+  } catch {
+    return { ok: false, error: "Failed to generate report." };
+  }
+}
+
 // ─── Test Report ─────────────────────────────────────────────────────────────
 
 export type TestBreakdownRow = {

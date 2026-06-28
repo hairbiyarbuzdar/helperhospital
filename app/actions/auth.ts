@@ -34,7 +34,7 @@ export async function login(
     return { message: "Invalid username or password." };
   }
 
-  await createSession(user.id, user.role);
+  await createSession(user.id, user.role, user.modules);
   redirect("/dashboard");
 }
 

@@ -2,18 +2,8 @@
 
 import { useActionState, useEffect, useState, useTransition } from "react";
 import { UserPlus, Pencil, Trash2, Eye, EyeOff } from "lucide-react";
-import {
-  createUser,
-  updateUser,
-  deleteUser,
-  type UserActionState,
-} from "./actions";
-import {
-  STAFF_ROLES,
-  ROLE_LABEL,
-  ROLE_MODULES,
-  type StaffRole,
-} from "./constants";
+import { createUser, updateUser, deleteUser, type UserActionState } from "./actions";
+import { MODULES } from "./constants";
 import Modal from "../_components/modal";
 
 const fieldClass =
@@ -50,71 +40,64 @@ function PasswordInput({
   );
 }
 
-function RoleRadios({
-  defaultValue,
-  onChange,
-}: {
-  defaultValue?: StaffRole;
-  onChange?: (r: StaffRole) => void;
-}) {
-  const [selected, setSelected] = useState<StaffRole>(
-    defaultValue ?? "RECEPTIONIST",
-  );
+function ModuleCheckboxes({ defaultModules = [] }: { defaultModules?: string[] }) {
+  const [selected, setSelected] = useState<Set<string>>(new Set(defaultModules));
 
-  function pick(r: StaffRole) {
-    setSelected(r);
-    onChange?.(r);
+  function toggle(key: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <div className="grid grid-cols-2 gap-2">
-        {STAFF_ROLES.map((r) => (
-          <label
-            key={r}
-            className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 transition ${
-              selected === r
-                ? "border-brand bg-success-soft text-brand"
-                : "border-edge text-ink hover:bg-canvas"
-            }`}
-          >
-            <input
-              type="radio"
-              name="role"
-              value={r}
-              checked={selected === r}
-              onChange={() => pick(r)}
-              className="hidden"
-            />
-            <span
-              className={`h-3.5 w-3.5 shrink-0 rounded-full border-2 ${
-                selected === r ? "border-brand bg-brand" : "border-edge"
+        {MODULES.map((m) => {
+          const checked = selected.has(m.key);
+          return (
+            <label
+              key={m.key}
+              className={`flex cursor-pointer items-center gap-2.5 rounded-lg border px-3 py-2.5 transition select-none ${
+                checked
+                  ? "border-brand bg-success-soft text-brand"
+                  : "border-edge text-ink hover:bg-canvas"
               }`}
-            />
-            <span className="text-sm font-medium">{ROLE_LABEL[r]}</span>
-          </label>
-        ))}
-      </div>
-
-      {/* Module access summary */}
-      <div className="rounded-lg border border-edge bg-canvas px-4 py-3">
-        <p className="mb-1.5 text-xs font-semibold tracking-wider text-ink-muted">
-          MODULE ACCESS
-        </p>
-        <div className="flex flex-wrap gap-1.5">
-          {ROLE_MODULES[selected].map((m) => (
-            <span
-              key={m}
-              className="rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-medium text-brand"
             >
-              {m}
-            </span>
-          ))}
-        </div>
+              <input
+                type="checkbox"
+                name="modules"
+                value={m.key}
+                checked={checked}
+                onChange={() => toggle(m.key)}
+                className="hidden"
+              />
+              <span
+                className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border-2 transition ${
+                  checked ? "border-brand bg-brand" : "border-edge"
+                }`}
+              >
+                {checked && (
+                  <svg className="h-2.5 w-2.5 text-white" viewBox="0 0 10 10" fill="none">
+                    <path d="M1.5 5l2.5 2.5 4.5-4.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                )}
+              </span>
+              <span className="text-sm font-medium">{m.label}</span>
+            </label>
+          );
+        })}
       </div>
+      {selected.size === 0 && (
+        <p className="text-xs text-warning">No modules selected — this user won't see any sections.</p>
+      )}
     </div>
   );
 }
+
+/* ─── Create ─── */
 
 function CreateUserForm({ onDone }: { onDone: () => void }) {
   const [state, action, pending] = useActionState<UserActionState, FormData>(
@@ -130,35 +113,23 @@ function CreateUserForm({ onDone }: { onDone: () => void }) {
     <form action={action} className="flex flex-col gap-4">
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="cu-username" className="text-sm font-medium text-ink">
-            Username
-          </label>
+          <label className="text-sm font-medium text-ink">Username</label>
           <input
-            id="cu-username"
             name="username"
-            placeholder="staff_name"
+            placeholder="e.g. receptionist1"
             className={fieldClass}
             autoFocus
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="cu-name" className="text-sm font-medium text-ink">
-            Full name <span className="text-ink-muted">(optional)</span>
-          </label>
-          <input id="cu-name" name="name" placeholder="Display name" className={fieldClass} />
+          <label className="text-sm font-medium text-ink">Password</label>
+          <PasswordInput name="password" placeholder="Min 6 characters" required />
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label htmlFor="cu-password" className="text-sm font-medium text-ink">
-          Password
-        </label>
-        <PasswordInput name="password" placeholder="Min 6 characters" required />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <p className="text-sm font-medium text-ink">Role</p>
-        <RoleRadios defaultValue="RECEPTIONIST" />
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium text-ink">Module access</p>
+        <ModuleCheckboxes />
       </div>
 
       {state?.error && (
@@ -200,7 +171,7 @@ export function CreateUserButton() {
         Add user
       </button>
       {open && (
-        <Modal title="Create staff user" size="lg" onClose={() => setOpen(false)}>
+        <Modal title="Create user" size="lg" onClose={() => setOpen(false)}>
           <CreateUserForm onDone={() => setOpen(false)} />
         </Modal>
       )}
@@ -208,11 +179,12 @@ export function CreateUserButton() {
   );
 }
 
+/* ─── Edit ─── */
+
 export type UserRow = {
   id: string;
   username: string;
-  name: string | null;
-  role: string;
+  modules: string[];
   isActive: boolean;
 };
 
@@ -238,23 +210,16 @@ function EditUserForm({ user, onDone }: { user: UserRow; onDone: () => void }) {
           </div>
         </div>
         <div className="flex flex-col gap-1.5">
-          <label htmlFor="eu-name" className="text-sm font-medium text-ink">
-            Full name <span className="text-ink-muted">(optional)</span>
+          <label className="text-sm font-medium text-ink">
+            New password <span className="text-ink-muted text-xs">(leave blank to keep)</span>
           </label>
-          <input id="eu-name" name="name" defaultValue={user.name ?? ""} placeholder="Display name" className={fieldClass} />
+          <PasswordInput name="password" placeholder="Min 6 characters" />
         </div>
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-ink">
-          New password <span className="text-ink-muted">(leave blank to keep current)</span>
-        </label>
-        <PasswordInput name="password" placeholder="Min 6 characters" />
-      </div>
-
-      <div className="flex flex-col gap-1.5">
-        <p className="text-sm font-medium text-ink">Role</p>
-        <RoleRadios defaultValue={user.role as StaffRole} />
+      <div className="flex flex-col gap-2">
+        <p className="text-sm font-medium text-ink">Module access</p>
+        <ModuleCheckboxes defaultModules={user.modules} />
       </div>
 
       <label className="flex items-center gap-2 text-sm font-medium text-ink">
@@ -262,9 +227,9 @@ function EditUserForm({ user, onDone }: { user: UserRow; onDone: () => void }) {
           type="checkbox"
           name="isActive"
           defaultChecked={user.isActive}
-          className="h-4 w-4 rounded border-edge text-brand focus:ring-brand"
+          className="h-4 w-4 rounded border-edge accent-brand"
         />
-        Active
+        Active account
       </label>
 
       {state?.error && (
@@ -318,7 +283,7 @@ export function DeleteUserButton({ user }: { user: UserRow }) {
   const [, startTransition] = useTransition();
 
   function handleDelete() {
-    if (!confirm(`Delete user "${user.username}"? They will no longer be able to log in.`)) return;
+    if (!confirm(`Delete "${user.username}"? They will no longer be able to log in.`)) return;
     startTransition(async () => {
       await deleteUser(user.id);
     });

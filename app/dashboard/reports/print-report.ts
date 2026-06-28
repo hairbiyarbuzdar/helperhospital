@@ -1,6 +1,4 @@
-import type { TodayReport, TestReport } from "./actions";
-
-const STORAGE_KEY = "hh_preferred_printer";
+import type { TodayReport, TestReport, ReturnReport } from "./actions";
 
 function rs(n: number) {
   return "Rs " + n.toLocaleString("en-PK");
@@ -38,27 +36,12 @@ ${body}
 </body></html>`;
 }
 
-async function tryDirectPrint(html: string): Promise<boolean> {
-  const printerName =
-    typeof localStorage !== "undefined"
-      ? (localStorage.getItem(STORAGE_KEY) ?? "")
-      : "";
-  if (!printerName) return false;
-  try {
-    const res = await fetch("/api/direct-print", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ html, printerName }),
-    });
-    const data = (await res.json()) as { ok: boolean };
-    return data.ok === true;
-  } catch {
-    return false;
-  }
-}
+export function printTodayReport(data: TodayReport) {
+  const win = window.open("", "_blank", "width=820,height=1100");
+  if (!win) return;
 
-function buildTodayHtml(data: TodayReport): string {
   const period = fmtDate(data.date);
+
   const rows =
     data.patients.length === 0
       ? `<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">No patients registered.</td></tr>`
@@ -74,6 +57,7 @@ function buildTodayHtml(data: TodayReport): string {
         </tr>`,
           )
           .join("");
+
   const body = `
     <h1>Today's Report</h1>
     <p class="sub">Helper Hospital &nbsp;·&nbsp; ${period}</p>
@@ -88,14 +72,20 @@ function buildTodayHtml(data: TodayReport): string {
       <tbody>${rows}</tbody>
       <tfoot><tr><td colspan="4">Total</td><td class="r">${rs(data.totalCollected)}</td></tr></tfoot>
     </table>`;
-  return shell("Today's Report", body);
+
+  win.document.write(shell("Today's Report", body));
+  win.document.close();
 }
 
-function buildTestHtml(data: TestReport): string {
+export function printTestReport(data: TestReport) {
+  const win = window.open("", "_blank", "width=820,height=1100");
+  if (!win) return;
+
   const period =
     data.from === data.to
       ? fmtDate(data.from)
       : `${fmtDate(data.from)} — ${fmtDate(data.to)}`;
+
   const rows =
     data.breakdown.length === 0
       ? `<tr><td colspan="4" style="text-align:center;color:#888;padding:16px">No tests ordered in this period.</td></tr>`
@@ -110,6 +100,7 @@ function buildTestHtml(data: TestReport): string {
         </tr>`,
           )
           .join("");
+
   const body = `
     <h1>Test Report</h1>
     <p class="sub">Helper Hospital &nbsp;·&nbsp; ${period}</p>
@@ -123,23 +114,65 @@ function buildTestHtml(data: TestReport): string {
       <tbody>${rows}</tbody>
       <tfoot><tr><td colspan="2">Total</td><td class="r">${data.totalTests}</td><td class="r">${rs(data.totalRevenue)}</td></tr></tfoot>
     </table>`;
-  return shell("Test Report", body);
-}
 
-export async function printTodayReport(data: TodayReport) {
-  const html = buildTodayHtml(data);
-  if (await tryDirectPrint(html)) return;
-  const win = window.open("", "_blank", "width=820,height=1100");
-  if (!win) return;
-  win.document.write(html);
+  win.document.write(shell("Test Report", body));
   win.document.close();
 }
 
-export async function printTestReport(data: TestReport) {
-  const html = buildTestHtml(data);
-  if (await tryDirectPrint(html)) return;
+export function printReturnReport(data: ReturnReport) {
   const win = window.open("", "_blank", "width=820,height=1100");
   if (!win) return;
-  win.document.write(html);
+
+  const fmtD = (s: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Karachi",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(s));
+
+  const fmtDT = (iso: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Karachi",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    }).format(new Date(iso));
+
+  const period =
+    data.from === data.to ? fmtD(data.from + "T12:00:00+05:00") : `${fmtD(data.from + "T12:00:00+05:00")} — ${fmtD(data.to + "T12:00:00+05:00")}`;
+
+  const rows =
+    data.rows.length === 0
+      ? `<tr><td colspan="4" style="text-align:center;color:#888;padding:16px">No fee returns in this period.</td></tr>`
+      : data.rows
+          .map(
+            (r) =>
+              `<tr>
+          <td>${r.mrNumber}</td>
+          <td style="font-weight:700;text-transform:uppercase">${r.name}</td>
+          <td class="r" style="color:#c2410c;font-weight:700">${rs(r.amount)}</td>
+          <td class="r">${fmtDT(r.refundedAt)}</td>
+        </tr>`,
+          )
+          .join("");
+
+  const body = `
+    <h1>Fee Return Report</h1>
+    <p class="sub">Helper Hospital &nbsp;·&nbsp; ${period}</p>
+    <div class="stats" style="grid-template-columns:repeat(2,1fr)">
+      <div class="stat"><div class="stat-label">Total Returns</div><div class="stat-value">${data.totalReturns}</div></div>
+      <div class="stat"><div class="stat-label">Total Amount Returned</div><div class="stat-value" style="color:#c2410c">${rs(data.totalAmount)}</div></div>
+    </div>
+    <table>
+      <thead><tr><th>MR #</th><th>Patient</th><th class="r">Amount</th><th class="r">Return Date</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot><tr><td colspan="2">Total</td><td class="r" style="color:#c2410c">${rs(data.totalAmount)}</td><td></td></tr></tfoot>
+    </table>`;
+
+  win.document.write(shell("Fee Return Report", body));
   win.document.close();
 }

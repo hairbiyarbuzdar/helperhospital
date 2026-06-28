@@ -17,6 +17,7 @@ export const verifySession = cache(async () => {
     isAuth: true,
     userId: session.userId as string,
     role: session.role as string,
+    modules: (session.modules ?? []) as string[],
   };
 });
 
@@ -32,6 +33,7 @@ export const getUser = cache(async () => {
         name: true,
         email: true,
         role: true,
+        modules: true,
       },
     });
   } catch {

@@ -21,15 +21,15 @@ import {
 import { logout } from "@/app/actions/auth";
 
 const NAV = [
-  { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
-  { href: "/dashboard/patients", label: "Patients", icon: Users },
-  { href: "/dashboard/tests", label: "Tests", icon: TestTube },
-  { href: "/dashboard/returns", label: "Fee Return", icon: Undo2 },
-  { href: "/dashboard/reports", label: "Reports", icon: FileText },
-  { href: "/dashboard/doctors", label: "Doctors", icon: Stethoscope },
-  { href: "/dashboard/activity", label: "Activity Log", icon: History },
-  { href: "/dashboard/users", label: "User Management", icon: ShieldCheck },
-  { href: "/dashboard/settings", label: "Settings", icon: Settings },
+  { href: "/dashboard",          label: "Dashboard",       icon: LayoutGrid,  key: null },
+  { href: "/dashboard/patients", label: "Patients",        icon: Users,       key: "patients" },
+  { href: "/dashboard/tests",    label: "Tests",           icon: TestTube,    key: "tests" },
+  { href: "/dashboard/returns",  label: "Fee Return",      icon: Undo2,       key: "returns" },
+  { href: "/dashboard/reports",  label: "Reports",         icon: FileText,    key: "reports" },
+  { href: "/dashboard/doctors",  label: "Doctors",         icon: Stethoscope, key: "doctors" },
+  { href: "/dashboard/activity", label: "Activity Log",    icon: History,     key: "activity" },
+  { href: "/dashboard/users",    label: "User Management", icon: ShieldCheck, key: "users" },
+  { href: "/dashboard/settings", label: "Settings",        icon: Settings,    key: null },
 ];
 
 function initials(name: string) {
@@ -45,9 +45,11 @@ function initials(name: string) {
 export default function Sidebar({
   name,
   role,
+  modules,
 }: {
   name: string;
   role: string;
+  modules: string[];
 }) {
   const pathname = usePathname();
   const [backupDone, setBackupDone] = useState(false);
@@ -76,7 +78,9 @@ export default function Sidebar({
           WORKSPACE
         </p>
         <ul className="flex flex-col gap-1">
-          {NAV.map((item) => {
+          {NAV.filter((item) =>
+            role === "ADMIN" || item.key === null || modules.includes(item.key),
+          ).map((item) => {
             const active =
               item.href === "/dashboard"
                 ? pathname === "/dashboard"

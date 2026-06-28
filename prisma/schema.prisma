@@ -42,6 +42,7 @@ model User {
   name      String?
   password  String
   role      Role     @default(RECEPTIONIST)
+  modules   String[] @default([])
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
