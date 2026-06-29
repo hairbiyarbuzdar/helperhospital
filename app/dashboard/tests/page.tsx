@@ -15,17 +15,6 @@ export const dynamic = "force-dynamic";
 
 const PAGE_SIZE = 10;
 
-const STATUS_LABEL: Record<string, string> = {
-  PENDING: "Pending",
-  IN_PROGRESS: "In Progress",
-  COMPLETED: "Completed",
-};
-const STATUS_CLASS: Record<string, string> = {
-  PENDING: "bg-warning-soft text-warning",
-  IN_PROGRESS: "bg-surface-soft text-brand",
-  COMPLETED: "bg-success-soft text-success",
-};
-
 function fmtDate(d: Date) {
   return d.toISOString().slice(0, 10);
 }
@@ -311,8 +300,6 @@ async function OrderTab({ page, q }: { page: number; q: string }) {
                     <th className="px-6 py-3">NAME</th>
                     <th className="px-6 py-3">TEST</th>
                     <th className="px-6 py-3">RATE</th>
-                    <th className="px-6 py-3">STATUS</th>
-                    <th className="px-6 py-3">PAYMENT</th>
                     <th className="px-6 py-3">DATE</th>
                     <th className="px-6 py-3 text-right">ACTIONS</th>
                   </tr>
@@ -336,24 +323,6 @@ async function OrderTab({ page, q }: { page: number; q: string }) {
                         <td className="px-6 py-4 text-ink">{o.testName}</td>
                         <td className="px-6 py-4 font-semibold text-ink">
                           {formatRs(o.rate)}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${STATUS_CLASS[o.status]}`}
-                          >
-                            {STATUS_LABEL[o.status]}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                              o.payment === "PAID"
-                                ? "bg-success-soft text-success"
-                                : "bg-warning-soft text-warning"
-                            }`}
-                          >
-                            {o.payment === "PAID" ? "Paid" : "Unpaid"}
-                          </span>
                         </td>
                         <td className="px-6 py-4 text-ink-muted">
                           {fmtDate(o.createdAt)}

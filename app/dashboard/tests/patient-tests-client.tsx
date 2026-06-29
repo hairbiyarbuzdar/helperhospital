@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
 import { formatRs } from "@/lib/format";
 import {
   createPatientTests,
@@ -9,7 +9,6 @@ import {
   deletePatientTest,
   type ActionState,
 } from "./actions";
-import LineItems, { type ChosenItem } from "../patients/line-items";
 import { openSlipWindow, writeSlip } from "../patients/print-slip";
 import Modal from "../_components/modal";
 
@@ -103,6 +102,9 @@ function PatientSearch({
   );
 }
 
+const rowFieldClass =
+  "w-full rounded-lg border border-edge bg-surface px-3 py-2.5 text-ink outline-none transition focus:border-brand focus:ring-2 focus:ring-success-soft";
+
 function OrderForm({
   patients,
   tests,
@@ -113,16 +115,22 @@ function OrderForm({
   onDone: () => void;
 }) {
   const [selectedPatientId, setSelectedPatientId] = useState("");
-  const [items, setItems] = useState<ChosenItem[]>([]);
+  const [testRows, setTestRows] = useState<TestOption[]>(tests);
   const [error, setError] = useState<string | undefined>();
   const [pending, startTransition] = useTransition();
 
-  const testMap = new Map(tests.map((t) => [t.id, t]));
-  const summary = items.map((i) => ({
-    name: testMap.get(i.id)?.name ?? "Test",
-    rate: i.rate,
-  }));
-  const total = summary.reduce((s, r) => s + r.rate, 0);
+  const total = testRows.reduce((s, r) => s + r.rate, 0);
+
+  function removeTest(id: string) {
+    setTestRows((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  function updateRate(id: string, raw: string) {
+    const n = parseInt(raw, 10);
+    setTestRows((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, rate: isNaN(n) ? 0 : Math.max(0, n) } : r)),
+    );
+  }
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -132,7 +140,7 @@ function OrderForm({
       setError("Select a patient from the search results.");
       return;
     }
-    if (items.length === 0) {
+    if (testRows.length === 0) {
       setError("Add at least one test.");
       return;
     }
@@ -140,7 +148,7 @@ function OrderForm({
     startTransition(async () => {
       const res = await createPatientTests({
         patientId,
-        items: items.map((i) => ({ testId: i.id, rate: i.rate })),
+        items: testRows.map((r) => ({ testId: r.id, rate: r.rate })),
       });
       if (res?.ok) {
         if (res.slip && win) writeSlip(win, res.slip);
@@ -166,19 +174,50 @@ function OrderForm({
         )}
       </div>
 
-      <LineItems
-        title="Tests"
-        catalog={tests}
-        emptyHint="Add tests in the Test Catalog tab first."
-        onChange={setItems}
-      />
+      <div className="border-t border-edge pt-4">
+        <p className="text-sm font-semibold text-ink">Tests</p>
+        {tests.length === 0 ? (
+          <p className="mt-2 rounded-lg bg-warning-soft px-3 py-2 text-xs text-warning">
+            No tests in catalog. Add tests in the Test Catalog tab first.
+          </p>
+        ) : testRows.length === 0 ? (
+          <p className="mt-2 rounded-lg bg-canvas px-3 py-2 text-xs text-ink-muted">
+            All tests removed.
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-col gap-2">
+            {testRows.map((row) => (
+              <div key={row.id} className="grid grid-cols-[1fr_6rem_auto] items-center gap-2">
+                <span className="rounded-lg border border-edge bg-canvas px-3 py-2.5 text-sm text-ink">
+                  {row.name}
+                </span>
+                <input
+                  value={row.rate}
+                  onChange={(e) => updateRate(row.id, e.target.value)}
+                  inputMode="numeric"
+                  placeholder="Rate"
+                  className={`${rowFieldClass} text-right`}
+                />
+                <button
+                  type="button"
+                  onClick={() => removeTest(row.id)}
+                  className="rounded-md p-2 text-ink-muted transition hover:bg-danger-soft hover:text-danger"
+                  title="Remove"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {summary.length > 0 && (
+      {testRows.length > 0 && (
         <div className="rounded-xl border border-edge bg-canvas p-4">
           <p className="text-xs font-semibold tracking-wider text-ink-muted">SUMMARY</p>
           <ul className="mt-2 flex flex-col gap-1">
-            {summary.map((r, idx) => (
-              <li key={idx} className="flex justify-between text-sm">
+            {testRows.map((r) => (
+              <li key={r.id} className="flex justify-between text-sm">
                 <span className="text-ink">{r.name}</span>
                 <span className="font-medium text-ink">{formatRs(r.rate)}</span>
               </li>

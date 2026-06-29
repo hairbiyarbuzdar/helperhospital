@@ -1,4 +1,4 @@
-import type { TodayReport, TestReport, ReturnReport } from "./actions";
+import type { TodayReport, TestReport, ReturnReport, OverviewReport } from "./actions";
 
 function rs(n: number) {
   return "Rs " + n.toLocaleString("en-PK");
@@ -174,5 +174,96 @@ export function printReturnReport(data: ReturnReport) {
     </table>`;
 
   win.document.write(shell("Fee Return Report", body));
+  win.document.close();
+}
+
+export function printOverviewReport(data: OverviewReport) {
+  const win = window.open("", "_blank", "width=820,height=1100");
+  if (!win) return;
+
+  const fmtLong = (s: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Karachi",
+      day: "2-digit",
+      month: "long",
+      year: "numeric",
+    }).format(new Date(`${s}T12:00:00+05:00`));
+
+  const fmtShort = (iso: string) =>
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Karachi",
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    }).format(new Date(iso));
+
+  const period =
+    data.from === data.to
+      ? fmtLong(data.from)
+      : `${fmtLong(data.from)} — ${fmtLong(data.to)}`;
+
+  const statCols = data.totalRefunded > 0 ? 5 : 4;
+  const payTotal = data.payments.reduce((s, p) => s + p.amount, 0);
+
+  const patientRows =
+    data.patients.length === 0
+      ? `<tr><td colspan="4" style="text-align:center;color:#888;padding:16px">No patients registered.</td></tr>`
+      : data.patients
+          .map(
+            (p) =>
+              `<tr>
+          <td>${p.mrNumber}</td>
+          <td style="font-weight:700;text-transform:uppercase">${p.name}</td>
+          <td>${p.doctor ?? "—"}</td>
+          <td class="r">${fmtShort(p.createdAt)}</td>
+        </tr>`,
+          )
+          .join("");
+
+  const rows =
+    data.payments.length === 0
+      ? `<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">No payments collected in this period.</td></tr>`
+      : data.payments
+          .map(
+            (p) =>
+              `<tr>
+          <td>#${p.receiptNo}</td>
+          <td>${p.mrNumber}</td>
+          <td style="font-weight:700;text-transform:uppercase">${p.patientName}</td>
+          <td class="r">${rs(p.amount)}</td>
+          <td class="r">${fmtShort(p.date)}</td>
+        </tr>`,
+          )
+          .join("");
+
+  const body = `
+    <h1>Overview Report</h1>
+    <p class="sub">Helper Hospital &nbsp;·&nbsp; ${period}</p>
+    <div class="stats" style="grid-template-columns:repeat(${statCols},1fr)">
+      <div class="stat"><div class="stat-label">Patients Registered</div><div class="stat-value">${data.patientsRegistered}</div></div>
+      <div class="stat"><div class="stat-label">Tests Ordered</div><div class="stat-value">${data.testsOrdered}</div></div>
+      <div class="stat"><div class="stat-label">Total Collected</div><div class="stat-value">${rs(data.totalCollected)}</div></div>
+      ${data.totalRefunded > 0 ? `<div class="stat"><div class="stat-label">Refunded</div><div class="stat-value" style="color:#c2410c">${rs(data.totalRefunded)}</div></div>` : ""}
+      <div class="stat"><div class="stat-label">Net Collected</div><div class="stat-value" style="color:#16a34a">${rs(data.netCollected)}</div></div>
+    </div>
+    <h2 style="font-size:13px;font-weight:700;margin:18px 0 8px">Patients Registered</h2>
+    <table>
+      <thead><tr><th>MR #</th><th>Patient</th><th>Doctor</th><th class="r">Date</th></tr></thead>
+      <tbody>${patientRows}</tbody>
+    </table>
+    <h2 style="font-size:13px;font-weight:700;margin:18px 0 8px">Payments Collected</h2>
+    <table>
+      <thead><tr><th>Receipt #</th><th>MR #</th><th>Patient</th><th class="r">Amount</th><th class="r">Date</th></tr></thead>
+      <tbody>${rows}</tbody>
+      <tfoot>
+        <tr>
+          <td colspan="3">Total</td>
+          <td class="r">${rs(payTotal)}</td>
+          <td></td>
+        </tr>
+      </tfoot>
+    </table>`;
+
+  win.document.write(shell("Overview Report", body));
   win.document.close();
 }

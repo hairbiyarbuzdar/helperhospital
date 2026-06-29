@@ -10,6 +10,104 @@ function dayBounds(dateStr: string) {
   };
 }
 
+// ─── Overview Report ─────────────────────────────────────────────────────────
+
+export type OverviewPatientRow = {
+  id: string;
+  mrNumber: string;
+  name: string;
+  doctor: string | null;
+  createdAt: string;
+};
+
+export type OverviewPaymentRow = {
+  id: string;
+  receiptNo: number;
+  mrNumber: string;
+  patientName: string;
+  amount: number;
+  date: string;
+};
+
+export type OverviewReport = {
+  from: string;
+  to: string;
+  patientsRegistered: number;
+  testsOrdered: number;
+  totalCollected: number;
+  totalRefunded: number;
+  netCollected: number;
+  patients: OverviewPatientRow[];
+  payments: OverviewPaymentRow[];
+};
+
+export async function generateOverviewReport(
+  from: string,
+  to: string,
+): Promise<{ ok: true; data: OverviewReport } | { ok: false; error: string }> {
+  try {
+    await verifySession();
+    const start = new Date(`${from}T00:00:00+05:00`);
+    const end = new Date(`${to}T23:59:59.999+05:00`);
+
+    const [patientsCount, testsCount, collected, refunded, patients, payments] = await Promise.all([
+      prisma.patient.count({ where: { createdAt: { gte: start, lte: end } } }),
+      prisma.patientTest.count({ where: { createdAt: { gte: start, lte: end } } }),
+      prisma.payment.aggregate({
+        where: { createdAt: { gte: start, lte: end } },
+        _sum: { amount: true },
+      }),
+      prisma.payment.aggregate({
+        where: { refundedAt: { gte: start, lte: end } },
+        _sum: { amount: true },
+      }),
+      prisma.patient.findMany({
+        where: { createdAt: { gte: start, lte: end } },
+        include: { doctor: { select: { name: true } } },
+        orderBy: { serial: "asc" },
+      }),
+      prisma.payment.findMany({
+        where: { createdAt: { gte: start, lte: end } },
+        include: { patient: { select: { mrNumber: true, name: true } } },
+        orderBy: { createdAt: "desc" },
+      }),
+    ]);
+
+    const totalCollected = collected._sum.amount ?? 0;
+    const totalRefunded = refunded._sum.amount ?? 0;
+
+    return {
+      ok: true,
+      data: {
+        from,
+        to,
+        patientsRegistered: patientsCount,
+        testsOrdered: testsCount,
+        totalCollected,
+        totalRefunded,
+        netCollected: totalCollected - totalRefunded,
+        patients: patients.map((p) => ({
+          id: p.id,
+          mrNumber: p.mrNumber ?? "—",
+          name: p.name,
+          doctor: p.doctor?.name ?? null,
+          createdAt: p.createdAt.toISOString(),
+        })),
+        payments: payments.map((p) => ({
+          id: p.id,
+          receiptNo: p.receiptNo,
+          mrNumber: p.patient.mrNumber ?? "—",
+          patientName: p.patient.name,
+          amount: p.amount,
+          date: p.createdAt.toISOString(),
+        })),
+      },
+    };
+  } catch {
+    return { ok: false, error: "Failed to generate overview report." };
+  }
+}
+
 // ─── Today's Report ──────────────────────────────────────────────────────────
 
 export type TodayPatientRow = {
