@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { verifySession } from "@/lib/dal";
+import { verifySession, getUser } from "@/lib/dal";
 import { logActivity } from "@/lib/activity";
 import type { SlipData, SlipItem } from "../patients/actions";
 
@@ -164,6 +164,7 @@ export async function createPatientTests(
       createdAt: result.createdAt.toISOString(),
       items: slipItems,
       total,
+      slipMadeBy: (await getUser())?.name ?? (await getUser())?.username ?? null,
     },
   };
 }

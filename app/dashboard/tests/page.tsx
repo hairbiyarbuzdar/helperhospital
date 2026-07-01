@@ -8,6 +8,7 @@ import {
   OrderTestButton,
   UpdateTestButton,
   DeleteTestButton,
+  PrintTestButton,
   type OrderView,
 } from "./patient-tests-client";
 
@@ -309,6 +310,7 @@ async function OrderTab({ page, q }: { page: number; q: string }) {
                     const patientLabel = `${o.patient.mrNumber ?? "—"} · ${o.patient.name}`;
                     const view: OrderView = {
                       id: o.id,
+                      patientId: o.patientId,
                       patientLabel,
                       testName: o.testName,
                       rate: o.rate,
@@ -329,6 +331,7 @@ async function OrderTab({ page, q }: { page: number; q: string }) {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex justify-end gap-1">
+                            <PrintTestButton patientId={o.patientId} />
                             <UpdateTestButton order={view} />
                             <DeleteTestButton id={o.id} label={o.testName} />
                           </div>

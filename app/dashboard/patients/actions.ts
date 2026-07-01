@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import prisma from "@/lib/prisma";
-import { verifySession } from "@/lib/dal";
+import { verifySession, getUser } from "@/lib/dal";
 import { logActivity } from "@/lib/activity";
 
 export type ActionState = { ok?: boolean; error?: string } | undefined;
@@ -20,7 +20,14 @@ export type SlipData = {
   createdAt: string; // ISO timestamp
   items: SlipItem[];
   total: number;
+  slipMadeBy: string | null; // username of the staff who made the slip
 };
+
+// The display name of the currently signed-in user, for the "Slip Made By" line.
+async function currentUserName(): Promise<string | null> {
+  const user = await getUser();
+  return user?.name ?? user?.username ?? null;
+}
 export type BillingResult =
   | { ok?: boolean; error?: string; slip?: SlipData }
   | undefined;
@@ -192,6 +199,7 @@ export async function createPatientWithBilling(
       createdAt: result.createdAt.toISOString(),
       items: slipItems,
       total,
+      slipMadeBy: await currentUserName(),
     },
   };
 }
@@ -329,6 +337,7 @@ export async function getPatientSlip(
     createdAt: patient.createdAt.toISOString(),
     items,
     total: items.reduce((s, i) => s + i.amount, 0),
+    slipMadeBy: await currentUserName(),
   };
 }
 
@@ -468,6 +477,7 @@ export async function chargeExistingPatient(
       createdAt: result.createdAt.toISOString(),
       items: slipItems,
       total,
+      slipMadeBy: await currentUserName(),
     },
   };
 }

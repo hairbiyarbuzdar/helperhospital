@@ -17,66 +17,94 @@ function fmtDateTime(iso: string): string {
   return `${p(d.getDate())}-${p(d.getMonth() + 1)}-${d.getFullYear()} ${p(h)}:${p(d.getMinutes())}${ampm}`;
 }
 
-function slipBlock(slip: SlipData, copyLabel: string): string {
-  const when = fmtDateTime(slip.createdAt);
-  const rows = slip.items
-    .map(
-      (i) =>
-        `<tr><td>${esc(i.name)}</td><td class="amt">${i.amount.toFixed(2)}</td></tr>`,
-    )
-    .join("");
-  return `
-  <div class="slip">
-    <div class="copy">${copyLabel}</div>
-    <div class="title">Helper's Eye Teaching Hospital Quetta</div>
-    <div class="subtitle">Test Slip</div>
-    <div class="box">
-      <div class="head">
-        <div class="seal">HELPER'S EYE HOSPITAL · QUETTA</div>
-        <table class="fields">
-          <tr><td class="lbl">Receipt No.</td><td>${slip.receiptNo ?? "—"}</td><td class="lbl">MR #</td><td>${esc(slip.mrNumber)}</td><td class="lbl">Deposit Date:</td><td>${when}</td></tr>
-          <tr><td class="lbl">Patient Name:</td><td class="nm">${esc((slip.name || "").toUpperCase())}</td><td class="lbl">Gender:</td><td>${esc(slip.gender)}</td><td class="lbl">Test Date:</td><td>${when}</td></tr>
-          <tr><td class="lbl">Age:</td><td>${esc(slip.age)}</td><td class="lbl">CNIC:</td><td>${esc(slip.cnic ?? "")}</td><td class="lbl">Doctor:</td><td>${esc(slip.doctor ?? "")}</td></tr>
-        </table>
-      </div>
-      <table class="items">
-        <thead><tr><th>Test</th><th class="amt">Amount</th></tr></thead>
-        <tbody>${rows || '<tr><td>&nbsp;</td><td class="amt"></td></tr>'}</tbody>
-        <tfoot><tr><td>Total Amount</td><td class="amt">${slip.total.toFixed(2)}</td></tr></tfoot>
-      </table>
-      <div class="sign">Signature : ______________________</div>
-    </div>
-  </div>`;
-}
+// The eye exam findings recorded by hand on the left column of the OPD slip.
+const EXAM_ROWS = ["VA", "PH", "Ref", "IOP", "Ant Sig", "Fundus", "B-Scan"];
 
 function buildHtml(slip: SlipData): string {
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Test Slip ${esc(slip.mrNumber)}</title>
+  const when = fmtDateTime(slip.createdAt);
+  // OPD number is the patient's serial, embedded at the start of the MR number.
+  const opdNo = parseInt(slip.mrNumber, 10);
+  const opdLabel = Number.isFinite(opdNo) ? String(opdNo) : "—";
+  const examBoxes = EXAM_ROWS.map(
+    (r) => `<div class="exam">${esc(r)}</div>`,
+  ).join("");
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>OPD Slip ${esc(slip.mrNumber)}</title>
   <style>
     @page { size: A5; margin: 8mm; }
     * { box-sizing: border-box; }
     body { font-family: Arial, Helvetica, sans-serif; color:#000; margin:0; }
-    .slip { padding: 2mm 0; page-break-inside: avoid; }
-    .copy { text-align:right; font-size:9px; color:#555; }
-    .title { text-align:center; font-weight:bold; font-size:15px; }
-    .subtitle { text-align:center; font-weight:bold; font-size:13px; margin-bottom:4px; }
-    .box { border:1.5px solid #000; padding:6px; }
-    .head { display:flex; gap:8px; align-items:center; }
-    .seal { flex:0 0 58px; height:58px; border:1px solid #000; border-radius:50%; font-size:7px; line-height:1.2; text-align:center; display:flex; align-items:center; justify-content:center; padding:4px; font-weight:bold; }
-    .fields { width:100%; border-collapse:collapse; font-size:11px; }
-    .fields td { padding:2px 4px; vertical-align:top; }
-    .fields .lbl { color:#333; white-space:nowrap; }
-    .fields .nm { font-weight:bold; text-transform:uppercase; }
-    .items { width:100%; border-collapse:collapse; margin-top:6px; font-size:11px; }
-    .items th, .items td { border:1px solid #000; padding:3px 6px; text-align:left; }
-    .items .amt { text-align:right; width:90px; }
-    .items tfoot td { font-weight:bold; }
-    .sign { margin-top:14px; font-size:11px; }
-    .cut { border-top:1px dashed #999; margin:5mm 0; }
+    .slip { padding: 0; }
+    .header { display:flex; align-items:center; gap:8px; padding:0 4px 6px; }
+    .logo { flex:0 0 56px; height:56px; border:1px solid #000; border-radius:50%;
+            font-size:6px; line-height:1.15; text-align:center; display:flex;
+            align-items:center; justify-content:center; padding:4px; font-weight:bold; }
+    .brand { flex:1; text-align:center; }
+    .brand .name { font-weight:bold; font-size:16px; line-height:1.15; }
+    .brand .kind { font-size:13px; margin-top:2px; }
+    .box { border:1.5px solid #000; }
+    .info { border-bottom:1.5px solid #000; }
+    .info-row { display:flex; border-bottom:1px solid #000; }
+    .info-row:last-child { border-bottom:none; }
+    .cell { padding:3px 6px; font-size:11px; display:flex; gap:4px; align-items:baseline; }
+    .cell.grow { flex:1; }
+    .cell.div { border-left:1px solid #000; }
+    .lbl { color:#000; white-space:nowrap; }
+    .val { font-weight:bold; }
+    .val.line { flex:1; border-bottom:1px dotted #666; min-width:60px; }
+    .body { display:flex; min-height:135mm; }
+    .sidebar { flex:0 0 74px; border-right:1.5px solid #000; padding:8px 6px;
+               display:flex; flex-direction:column; gap:8px; }
+    .exam { border:1px solid #000; border-radius:3px; padding:5px 4px;
+            font-size:11px; font-weight:bold; text-align:center; }
+    .rx { flex:1; padding:8px 10px; position:relative; }
+    .rx .mark { font-size:20px; font-style:italic; }
+    .footer { display:flex; justify-content:space-between; align-items:flex-end;
+              border-top:1.5px solid #000; padding:6px 8px; font-size:11px; }
+    .footer .made { max-width:45%; }
+    .footer .sign { }
   </style></head>
   <body>
-    ${slipBlock(slip, "Hospital Copy")}
-    <div class="cut"></div>
-    ${slipBlock(slip, "Patient Copy")}
+    <div class="slip">
+      <div class="header">
+        <div class="logo">HELPER'S EYE HOSPITAL</div>
+        <div class="brand">
+          <div class="name">Helper's Eye Teaching Hospital</div>
+          <div class="name">Quetta</div>
+          <div class="kind">OPD Slip</div>
+        </div>
+        <div class="logo">HELPER'S EYE HOSPITAL · QUETTA</div>
+      </div>
+
+      <div class="box">
+        <div class="info">
+          <div class="info-row">
+            <div class="cell"><span class="lbl">OPD No.</span><span class="val">${esc(opdLabel)}</span></div>
+            <div class="cell"><span class="lbl">MR #</span><span class="val">${esc(slip.mrNumber)}</span></div>
+            <div class="cell div grow"><span class="lbl">Date:</span><span class="val">${when}</span></div>
+          </div>
+          <div class="info-row">
+            <div class="cell grow"><span class="lbl">Patient</span><span class="val">${esc((slip.name || "").toUpperCase())}</span></div>
+            <div class="cell div"><span class="lbl">Gender:</span><span class="val">${esc(slip.gender)}</span></div>
+            <div class="cell"><span class="lbl">Age:</span><span class="val">${esc(slip.age)}</span></div>
+          </div>
+          <div class="info-row">
+            <div class="cell grow"><span class="lbl">Diagnostic.</span><span class="val line"></span></div>
+            <div class="cell div"><span class="lbl">CNIC:</span><span class="val">${esc(slip.cnic ?? "")}</span></div>
+          </div>
+        </div>
+
+        <div class="body">
+          <div class="sidebar">${examBoxes}</div>
+          <div class="rx"><span class="mark">R<sub>x</sub></span></div>
+        </div>
+
+        <div class="footer">
+          <div class="made">Slip Made By ${esc(slip.slipMadeBy ?? "—")}</div>
+          <div class="sign">Signature : ______________________</div>
+        </div>
+      </div>
+    </div>
     <script>
       window.onafterprint = function(){ window.close(); };
       window.onload = function(){ window.focus(); window.print(); };

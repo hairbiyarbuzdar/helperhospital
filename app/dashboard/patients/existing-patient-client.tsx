@@ -9,7 +9,7 @@ import {
   type PatientHit,
 } from "./actions";
 import LineItems, { type CatalogOption, type ChosenItem } from "./line-items";
-import { openSlipWindow, writeSlip } from "./print-slip";
+import { openSlipWindow, writeSlip } from "./test-slip";
 import type { TestOption, FeeOption } from "./patients-client";
 import Modal from "../_components/modal";
 

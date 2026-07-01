@@ -1,7 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
-import { Plus, Pencil, Trash2, Search, X } from "lucide-react";
+import { Plus, Pencil, Trash2, Search, X, Printer } from "lucide-react";
 import { formatRs } from "@/lib/format";
 import {
   createPatientTests,
@@ -9,7 +9,8 @@ import {
   deletePatientTest,
   type ActionState,
 } from "./actions";
-import { openSlipWindow, writeSlip } from "../patients/print-slip";
+import { getPatientSlip } from "../patients/actions";
+import { openSlipWindow, writeSlip } from "../patients/test-slip";
 import Modal from "../_components/modal";
 
 const fieldClass =
@@ -19,6 +20,7 @@ export type PatientOption = { id: string; label: string };
 export type TestOption = { id: string; name: string; rate: number };
 export type OrderView = {
   id: string;
+  patientId: string;
   patientLabel: string;
   testName: string;
   rate: number;
@@ -386,6 +388,31 @@ export function UpdateTestButton({ order }: { order: OrderView }) {
         </Modal>
       )}
     </>
+  );
+}
+
+export function PrintTestButton({ patientId }: { patientId: string }) {
+  const [pending, startTransition] = useTransition();
+
+  function handlePrint() {
+    const win = openSlipWindow();
+    startTransition(async () => {
+      const slip = await getPatientSlip(patientId);
+      if (slip && win) writeSlip(win, slip);
+      else win?.close();
+    });
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={handlePrint}
+      disabled={pending}
+      title="Print test slip"
+      className="rounded-md p-1.5 text-ink-muted transition hover:bg-canvas hover:text-brand disabled:opacity-60"
+    >
+      <Printer className="h-4 w-4" />
+    </button>
   );
 }
 
