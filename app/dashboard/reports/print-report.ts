@@ -1,10 +1,10 @@
-import type { TodayReport, TestReport, ReturnReport, OverviewReport } from "./actions";
+import type { TestReport, ReturnReport, OverviewReport } from "./actions";
 
 function rs(n: number) {
   return "Rs " + n.toLocaleString("en-PK");
 }
 
-function fmtDate(dateStr: string) {
+function fmtLong(dateStr: string) {
   return new Intl.DateTimeFormat("en-GB", {
     timeZone: "Asia/Karachi",
     day: "2-digit",
@@ -13,67 +13,159 @@ function fmtDate(dateStr: string) {
   }).format(new Date(`${dateStr}T12:00:00+05:00`));
 }
 
-function shell(title: string, body: string) {
+function fmtShort(iso: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Karachi",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(new Date(iso));
+}
+
+function fmtDateTime(iso: string) {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Karachi",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date(iso));
+}
+
+function genStamp() {
+  return new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Asia/Karachi",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  }).format(new Date());
+}
+
+function periodLabel(from: string, to: string) {
+  return from === to ? fmtLong(from) : `${fmtLong(from)} — ${fmtLong(to)}`;
+}
+
+// A boxed, bordered summary strip (ledger-style figures across the top).
+function summaryBox(pairs: [string, string, string?][]) {
+  const cells = pairs
+    .map(
+      ([label, value, color]) =>
+        `<td><span class="s-label">${label}</span><span class="s-val"${color ? ` style="color:${color}"` : ""}>${value}</span></td>`,
+    )
+    .join("");
+  return `<table class="summary"><tr>${cells}</tr></table>`;
+}
+
+function shell(title: string, reportName: string, period: string, body: string) {
   return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${title}</title>
 <style>
-@page{size:A4;margin:18mm 20mm}
+@page{size:A4;margin:16mm 16mm}
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:Arial,sans-serif;font-size:11px;color:#111}
-h1{font-size:18px;font-weight:700;margin-bottom:2px}
-.sub{font-size:10px;color:#555;margin-bottom:16px}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px}
-.stat{border:1px solid #ccc;border-radius:4px;padding:8px 10px}
-.stat-label{font-size:8px;font-weight:700;letter-spacing:.5px;color:#888;text-transform:uppercase}
-.stat-value{font-size:15px;font-weight:800;margin-top:2px}
-table{width:100%;border-collapse:collapse}
-th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:#555;padding:6px 8px;border-bottom:2px solid #ccc;text-align:left}
-th.r,td.r{text-align:right}
-td{padding:5px 8px;border-bottom:1px solid #e5e5e5;font-size:10px}
-tfoot td{font-weight:700;border-top:2px solid #ccc;border-bottom:none;padding:6px 8px}
+body{font-family:Arial,Helvetica,sans-serif;font-size:11px;color:#000}
+.head{text-align:center;border-bottom:3px double #000;padding-bottom:8px}
+.hosp{font-family:Georgia,'Times New Roman',serif;font-size:20px;font-weight:700;letter-spacing:.3px}
+.city{font-size:11px;color:#222;margin-top:1px}
+.rtitle{margin-top:8px;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:2px}
+.meta{display:flex;justify-content:space-between;font-size:10px;color:#222;margin:6px 1px 14px}
+.meta b{font-weight:700}
+table.summary{width:100%;border-collapse:collapse;margin-bottom:16px}
+table.summary td{border:1px solid #000;padding:6px 9px;vertical-align:top}
+.s-label{display:block;font-size:8px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#444}
+.s-val{display:block;font-size:14px;font-weight:800;margin-top:3px;font-variant-numeric:tabular-nums}
+.section{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;margin:16px 0 5px;border-left:4px solid #000;padding-left:7px}
+table.ledger{width:100%;border-collapse:collapse}
+table.ledger th,table.ledger td{border:1px solid #000;padding:5px 8px;font-size:10.5px;text-align:left;vertical-align:top}
+table.ledger th{background:#e6e6e6;font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+table.ledger .r{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+table.ledger .c{text-align:center}
+table.ledger td.sr{text-align:center;width:36px;color:#222}
+table.ledger .nm{font-weight:700;text-transform:uppercase}
+table.ledger tfoot td{font-weight:800;background:#f0f0f0;border-top:2px solid #000}
+.empty{text-align:center;color:#666;padding:14px}
+.foot{margin-top:22px;display:flex;justify-content:space-between;font-size:9px;color:#444;border-top:1px solid #999;padding-top:6px}
 </style></head><body>
+<div class="head">
+  <div class="hosp">Helper's Eye Teaching Hospital</div>
+  <div class="city">Quetta</div>
+  <div class="rtitle">${reportName}</div>
+</div>
+<div class="meta"><span>Period: <b>${period}</b></span><span>Generated: <b>${genStamp()}</b></span></div>
 ${body}
+<div class="foot"><span>Helper's Eye Teaching Hospital · Quetta</span><span>Computer-generated ledger — no signature required.</span></div>
 <script>window.onload=function(){window.print()}</script>
 </body></html>`;
 }
 
-export function printTodayReport(data: TodayReport) {
+export function printOverviewReport(data: OverviewReport) {
   const win = window.open("", "_blank", "width=820,height=1100");
   if (!win) return;
 
-  const period = fmtDate(data.date);
+  const period = periodLabel(data.from, data.to);
+  const payTotal = data.payments.reduce((s, p) => s + p.amount, 0);
 
-  const rows =
+  const summary = summaryBox([
+    ["Patients Registered", String(data.patientsRegistered)],
+    ["Tests Ordered", String(data.testsOrdered)],
+    ["Total Collected", rs(data.totalCollected)],
+    ...(data.totalRefunded > 0
+      ? ([["Refunded", rs(data.totalRefunded), "#c2410c"]] as [string, string, string][])
+      : []),
+    ["Net Collected", rs(data.netCollected), "#166534"],
+  ]);
+
+  const patientRows =
     data.patients.length === 0
-      ? `<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">No patients registered.</td></tr>`
+      ? `<tr><td colspan="5" class="empty">No patients registered in this period.</td></tr>`
       : data.patients
           .map(
-            (p) =>
+            (p, i) =>
               `<tr>
+          <td class="sr">${i + 1}</td>
           <td>${p.mrNumber}</td>
-          <td style="font-weight:700;text-transform:uppercase">${p.name}</td>
+          <td class="nm">${p.name}</td>
           <td>${p.doctor ?? "—"}</td>
-          <td>${p.items.join(", ") || "—"}</td>
-          <td class="r">${rs(p.paid)}</td>
+          <td class="r">${fmtShort(p.createdAt)}</td>
+        </tr>`,
+          )
+          .join("");
+
+  const paymentRows =
+    data.payments.length === 0
+      ? `<tr><td colspan="6" class="empty">No payments collected in this period.</td></tr>`
+      : data.payments
+          .map(
+            (p, i) =>
+              `<tr>
+          <td class="sr">${i + 1}</td>
+          <td>#${p.receiptNo}</td>
+          <td>${p.mrNumber}</td>
+          <td class="nm">${p.patientName}</td>
+          <td class="r">${rs(p.amount)}</td>
+          <td class="r">${fmtShort(p.date)}</td>
         </tr>`,
           )
           .join("");
 
   const body = `
-    <h1>Today's Report</h1>
-    <p class="sub">Helper Hospital &nbsp;·&nbsp; ${period}</p>
-    <div class="stats" style="grid-template-columns:repeat(${data.totalRefunded > 0 ? 4 : 3},1fr)">
-      <div class="stat"><div class="stat-label">Patients Registered</div><div class="stat-value">${data.patientsRegistered}</div></div>
-      <div class="stat"><div class="stat-label">Tests Ordered</div><div class="stat-value">${data.testsOrdered}</div></div>
-      <div class="stat"><div class="stat-label">Total Collected</div><div class="stat-value">${rs(data.totalCollected)}</div></div>
-      ${data.totalRefunded > 0 ? `<div class="stat"><div class="stat-label">Net Collected</div><div class="stat-value">${rs(data.netCollected)}</div></div>` : ""}
-    </div>
-    <table>
-      <thead><tr><th>MR</th><th>Patient</th><th>Doctor</th><th>Items</th><th class="r">Paid</th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot><tr><td colspan="4">Total</td><td class="r">${rs(data.totalCollected)}</td></tr></tfoot>
+    ${summary}
+    <div class="section">Patients Registered</div>
+    <table class="ledger">
+      <thead><tr><th>Sr.</th><th>MR #</th><th>Patient</th><th>Doctor</th><th class="r">Date</th></tr></thead>
+      <tbody>${patientRows}</tbody>
+    </table>
+    <div class="section">Payments Collected</div>
+    <table class="ledger">
+      <thead><tr><th>Sr.</th><th>Receipt #</th><th>MR #</th><th>Patient</th><th class="r">Amount</th><th class="r">Date</th></tr></thead>
+      <tbody>${paymentRows}</tbody>
+      <tfoot><tr><td colspan="4">Total</td><td class="r">${rs(payTotal)}</td><td></td></tr></tfoot>
     </table>`;
 
-  win.document.write(shell("Today's Report", body));
+  win.document.write(shell("Overview Report", "Overview Ledger", period, body));
   win.document.close();
 }
 
@@ -81,18 +173,22 @@ export function printTestReport(data: TestReport) {
   const win = window.open("", "_blank", "width=820,height=1100");
   if (!win) return;
 
-  const period =
-    data.from === data.to
-      ? fmtDate(data.from)
-      : `${fmtDate(data.from)} — ${fmtDate(data.to)}`;
+  const period = periodLabel(data.from, data.to);
+
+  const summary = summaryBox([
+    ["Total Tests", String(data.totalTests)],
+    ["Total Revenue", rs(data.totalRevenue), "#166534"],
+    ["Test Types", String(data.breakdown.length)],
+  ]);
 
   const rows =
     data.breakdown.length === 0
-      ? `<tr><td colspan="4" style="text-align:center;color:#888;padding:16px">No tests ordered in this period.</td></tr>`
+      ? `<tr><td colspan="5" class="empty">No tests ordered in this period.</td></tr>`
       : data.breakdown
           .map(
-            (r) =>
+            (r, i) =>
               `<tr>
+          <td class="sr">${i + 1}</td>
           <td>${r.testName}</td>
           <td class="r">${rs(r.rate)}</td>
           <td class="r">${r.count}</td>
@@ -102,20 +198,15 @@ export function printTestReport(data: TestReport) {
           .join("");
 
   const body = `
-    <h1>Test Report</h1>
-    <p class="sub">Helper Hospital &nbsp;·&nbsp; ${period}</p>
-    <div class="stats" style="grid-template-columns:repeat(3,1fr)">
-      <div class="stat"><div class="stat-label">Total Tests</div><div class="stat-value">${data.totalTests}</div></div>
-      <div class="stat"><div class="stat-label">Total Revenue</div><div class="stat-value">${rs(data.totalRevenue)}</div></div>
-      <div class="stat"><div class="stat-label">Test Types</div><div class="stat-value">${data.breakdown.length}</div></div>
-    </div>
-    <table>
-      <thead><tr><th>Test Name</th><th class="r">Rate</th><th class="r">Count</th><th class="r">Revenue</th></tr></thead>
+    ${summary}
+    <div class="section">Test Breakdown</div>
+    <table class="ledger">
+      <thead><tr><th>Sr.</th><th>Test Name</th><th class="r">Rate</th><th class="r">Count</th><th class="r">Revenue</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td colspan="2">Total</td><td class="r">${data.totalTests}</td><td class="r">${rs(data.totalRevenue)}</td></tr></tfoot>
+      <tfoot><tr><td colspan="3">Total</td><td class="r">${data.totalTests}</td><td class="r">${rs(data.totalRevenue)}</td></tr></tfoot>
     </table>`;
 
-  win.document.write(shell("Test Report", body));
+  win.document.write(shell("Test Report", "Test Ledger", period, body));
   win.document.close();
 }
 
@@ -123,147 +214,38 @@ export function printReturnReport(data: ReturnReport) {
   const win = window.open("", "_blank", "width=820,height=1100");
   if (!win) return;
 
-  const fmtD = (s: string) =>
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Karachi",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(s));
+  const period = periodLabel(data.from, data.to);
 
-  const fmtDT = (iso: string) =>
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Karachi",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: true,
-    }).format(new Date(iso));
-
-  const period =
-    data.from === data.to ? fmtD(data.from + "T12:00:00+05:00") : `${fmtD(data.from + "T12:00:00+05:00")} — ${fmtD(data.to + "T12:00:00+05:00")}`;
+  const summary = summaryBox([
+    ["Total Returns", String(data.totalReturns)],
+    ["Total Amount Returned", rs(data.totalAmount), "#c2410c"],
+  ]);
 
   const rows =
     data.rows.length === 0
-      ? `<tr><td colspan="4" style="text-align:center;color:#888;padding:16px">No fee returns in this period.</td></tr>`
+      ? `<tr><td colspan="5" class="empty">No fee returns in this period.</td></tr>`
       : data.rows
           .map(
-            (r) =>
+            (r, i) =>
               `<tr>
+          <td class="sr">${i + 1}</td>
           <td>${r.mrNumber}</td>
-          <td style="font-weight:700;text-transform:uppercase">${r.name}</td>
+          <td class="nm">${r.name}</td>
           <td class="r" style="color:#c2410c;font-weight:700">${rs(r.amount)}</td>
-          <td class="r">${fmtDT(r.refundedAt)}</td>
+          <td class="r">${fmtDateTime(r.refundedAt)}</td>
         </tr>`,
           )
           .join("");
 
   const body = `
-    <h1>Fee Return Report</h1>
-    <p class="sub">Helper Hospital &nbsp;·&nbsp; ${period}</p>
-    <div class="stats" style="grid-template-columns:repeat(2,1fr)">
-      <div class="stat"><div class="stat-label">Total Returns</div><div class="stat-value">${data.totalReturns}</div></div>
-      <div class="stat"><div class="stat-label">Total Amount Returned</div><div class="stat-value" style="color:#c2410c">${rs(data.totalAmount)}</div></div>
-    </div>
-    <table>
-      <thead><tr><th>MR #</th><th>Patient</th><th class="r">Amount</th><th class="r">Return Date</th></tr></thead>
+    ${summary}
+    <div class="section">Fee Returns</div>
+    <table class="ledger">
+      <thead><tr><th>Sr.</th><th>MR #</th><th>Patient</th><th class="r">Amount</th><th class="r">Return Date</th></tr></thead>
       <tbody>${rows}</tbody>
-      <tfoot><tr><td colspan="2">Total</td><td class="r" style="color:#c2410c">${rs(data.totalAmount)}</td><td></td></tr></tfoot>
+      <tfoot><tr><td colspan="3">Total</td><td class="r" style="color:#c2410c">${rs(data.totalAmount)}</td><td></td></tr></tfoot>
     </table>`;
 
-  win.document.write(shell("Fee Return Report", body));
-  win.document.close();
-}
-
-export function printOverviewReport(data: OverviewReport) {
-  const win = window.open("", "_blank", "width=820,height=1100");
-  if (!win) return;
-
-  const fmtLong = (s: string) =>
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Karachi",
-      day: "2-digit",
-      month: "long",
-      year: "numeric",
-    }).format(new Date(`${s}T12:00:00+05:00`));
-
-  const fmtShort = (iso: string) =>
-    new Intl.DateTimeFormat("en-GB", {
-      timeZone: "Asia/Karachi",
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    }).format(new Date(iso));
-
-  const period =
-    data.from === data.to
-      ? fmtLong(data.from)
-      : `${fmtLong(data.from)} — ${fmtLong(data.to)}`;
-
-  const statCols = data.totalRefunded > 0 ? 5 : 4;
-  const payTotal = data.payments.reduce((s, p) => s + p.amount, 0);
-
-  const patientRows =
-    data.patients.length === 0
-      ? `<tr><td colspan="4" style="text-align:center;color:#888;padding:16px">No patients registered.</td></tr>`
-      : data.patients
-          .map(
-            (p) =>
-              `<tr>
-          <td>${p.mrNumber}</td>
-          <td style="font-weight:700;text-transform:uppercase">${p.name}</td>
-          <td>${p.doctor ?? "—"}</td>
-          <td class="r">${fmtShort(p.createdAt)}</td>
-        </tr>`,
-          )
-          .join("");
-
-  const rows =
-    data.payments.length === 0
-      ? `<tr><td colspan="5" style="text-align:center;color:#888;padding:16px">No payments collected in this period.</td></tr>`
-      : data.payments
-          .map(
-            (p) =>
-              `<tr>
-          <td>#${p.receiptNo}</td>
-          <td>${p.mrNumber}</td>
-          <td style="font-weight:700;text-transform:uppercase">${p.patientName}</td>
-          <td class="r">${rs(p.amount)}</td>
-          <td class="r">${fmtShort(p.date)}</td>
-        </tr>`,
-          )
-          .join("");
-
-  const body = `
-    <h1>Overview Report</h1>
-    <p class="sub">Helper Hospital &nbsp;·&nbsp; ${period}</p>
-    <div class="stats" style="grid-template-columns:repeat(${statCols},1fr)">
-      <div class="stat"><div class="stat-label">Patients Registered</div><div class="stat-value">${data.patientsRegistered}</div></div>
-      <div class="stat"><div class="stat-label">Tests Ordered</div><div class="stat-value">${data.testsOrdered}</div></div>
-      <div class="stat"><div class="stat-label">Total Collected</div><div class="stat-value">${rs(data.totalCollected)}</div></div>
-      ${data.totalRefunded > 0 ? `<div class="stat"><div class="stat-label">Refunded</div><div class="stat-value" style="color:#c2410c">${rs(data.totalRefunded)}</div></div>` : ""}
-      <div class="stat"><div class="stat-label">Net Collected</div><div class="stat-value" style="color:#16a34a">${rs(data.netCollected)}</div></div>
-    </div>
-    <h2 style="font-size:13px;font-weight:700;margin:18px 0 8px">Patients Registered</h2>
-    <table>
-      <thead><tr><th>MR #</th><th>Patient</th><th>Doctor</th><th class="r">Date</th></tr></thead>
-      <tbody>${patientRows}</tbody>
-    </table>
-    <h2 style="font-size:13px;font-weight:700;margin:18px 0 8px">Payments Collected</h2>
-    <table>
-      <thead><tr><th>Receipt #</th><th>MR #</th><th>Patient</th><th class="r">Amount</th><th class="r">Date</th></tr></thead>
-      <tbody>${rows}</tbody>
-      <tfoot>
-        <tr>
-          <td colspan="3">Total</td>
-          <td class="r">${rs(payTotal)}</td>
-          <td></td>
-        </tr>
-      </tfoot>
-    </table>`;
-
-  win.document.write(shell("Overview Report", body));
+  win.document.write(shell("Fee Return Report", "Fee Return Ledger", period, body));
   win.document.close();
 }
